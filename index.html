@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>THE LAST MEMORY</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=PT+Mono&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="screen"></canvas>
+
+    <!-- HUD -->
+    <div id="hud">
+      <div id="chapter-card" class="hidden"><div class="chap-num"></div><div class="chap-title"></div></div>
+      <div id="prompt" class="hidden"></div>
+      <div id="objective" class="hidden"></div>
+      <div id="toast" class="hidden"></div>
+      <div id="subtitle" class="hidden"></div>
+      <div id="dialogue" class="hidden">
+        <div class="speaker"></div>
+        <div class="text"></div>
+        <div class="choices"></div>
+        <div class="next">▼</div>
+      </div>
+      <div id="battle-hud" class="hidden">
+        <div class="bar left"><span class="name">ТЫ</span><div class="fill"></div></div>
+        <div class="bar right"><span class="name">?</span><div class="fill"></div></div>
+      </div>
+      <div id="meter" class="hidden"><span class="label"></span><div class="fill"></div></div>
+      <div id="phone" class="hidden">
+        <div class="phone-body">
+          <div class="phone-top"><span class="clock">22:14</span><span>▮▮▮ ◔</span></div>
+          <div class="phone-screen"></div>
+          <div class="phone-hint">↑↓ — выбор · E — открыть · Esc — назад</div>
+        </div>
+      </div>
+      <div id="caption" class="hidden"></div>
+      <div id="fakecrash" class="hidden">
+        <div class="win">
+          <div class="win-title">THE LAST MEMORY</div>
+          <div class="win-body">Программа «THE LAST MEMORY» не отвечает.<br /><br />Если вы закроете её, воспоминания могут быть потеряны.</div>
+          <div class="win-btns"><span class="btn">Подождать</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Menus -->
+    <div id="title-screen" class="menu hidden">
+      <div class="title-logo">THE LAST<br />MEMORY</div>
+      <div class="title-sub">психологическая история</div>
+      <ul class="menu-list"></ul>
+      <div class="title-foot">W/S или ↑/↓ — выбор · E / Enter — подтвердить</div>
+    </div>
+    <div id="pause-screen" class="menu hidden">
+      <div class="menu-head">ПАУЗА</div>
+      <ul class="menu-list"></ul>
+    </div>
+    <div id="help-screen" class="menu hidden">
+      <div class="menu-head">УПРАВЛЕНИЕ</div>
+      <pre class="help">
+W / ↑        — идти вперёд
+S / ↓        — идти назад
+A D / ← →    — поворот
+Shift        — бежать
+E / Пробел   — действие, далее
+Esc          — пауза
+F11 / пункт меню — полный экран
+
+Особые действия подсказываются на экране.
+      </pre>
+      <div class="title-foot">Esc / E — назад</div>
+    </div>
+    <div id="fade"></div>
+    <div id="start-gate">
+      <div class="gate-inner">
+        <div class="title-logo small">THE LAST MEMORY</div>
+        <p>Лучше играть в наушниках, в тишине.</p>
+        <p class="blink">Нажмите любую клавишу</p>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
