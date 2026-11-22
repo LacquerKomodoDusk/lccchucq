@@ -20,7 +20,7 @@ export const think = (g, text, opts = {}) => g.ui.say(null, text, { thought: tru
 export async function chapterStart(g, chap) {
   g.setFade(1);
   g.ui.clearAll();
-  document.title = 'THE LAST MEMORY';
+  document.title = 'ВОПРЕКИ';
   await g.ui.chapterCard(chap.num, chap.title);
 }
 

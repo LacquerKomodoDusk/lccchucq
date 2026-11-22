@@ -214,6 +214,6 @@ export default {
       ],
       pauseExtra: { label: 'Перестать бежать', action: () => fourthWall(g, 'Почти. Найди её. Тогда сможешь.') },
     });
-    document.title = 'THE LAST MEMORY';
+    document.title = 'ВОПРЕКИ';
   },
 };

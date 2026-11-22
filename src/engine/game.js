@@ -230,7 +230,11 @@ export class Game {
     if (this.camMode === 'follow' && this.player) {
       const f = this.camFollow;
       const p = this.player.root.position;
-      this.camYaw = lerpAngle(this.camYaw ?? 0, this.player.root.rotation.y, snap ? 1 : Math.min(1, dt * 2.2));
+      if (snap) { this.camYaw = this.player.root.rotation.y; this.camPitch = 0.25; }
+      // mouse orbit
+      this.camYaw = (this.camYaw ?? 0) - input.mouseDX * 0.0032;
+      this.camPitch = Math.max(-0.35, Math.min(1.1, (this.camPitch ?? 0.25) + input.mouseDY * 0.0026));
+      const pitch = this.camPitch;
       let dist = f.dist;
       const dir = new THREE.Vector3(Math.sin(this.camYaw), 0, Math.cos(this.camYaw));
       // pull camera in if it would sit inside a wall
@@ -239,7 +243,9 @@ export class Game {
         if (this.pointBlocked(x, z, 0.12)) { dist = Math.max(0.6, d - 0.2); break; }
       }
       const side = new THREE.Vector3(dir.z, 0, -dir.x).multiplyScalar(f.side);
-      const want = new THREE.Vector3(p.x - dir.x * dist + side.x, p.y + f.height, p.z - dir.z * dist + side.z);
+      const hd = dist * Math.cos(pitch - 0.25);
+      const want = new THREE.Vector3(p.x - dir.x * hd + side.x, p.y + f.lookH + (f.height - f.lookH) + Math.sin(pitch - 0.25) * dist, p.z - dir.z * hd + side.z);
+      want.y = Math.max(p.y + 0.3, want.y);
       if (snap) cam.position.copy(want); else cam.position.lerp(want, Math.min(1, dt * f.smooth));
       const look = new THREE.Vector3(p.x + dir.x * 0.8, p.y + f.lookH, p.z + dir.z * 0.8);
       this.camLook = look;
@@ -285,22 +291,28 @@ export class Game {
     const c = this.player; if (!c) return;
     if (!this.controlEnabled || this.busy || this.ui.dlg) { if (c.state === 'walk' || c.state === 'run') c.state = 'idle'; return; }
     const ps = this.playerState;
-    const turn = (input.isDown('left') ? 1 : 0) - (input.isDown('right') ? 1 : 0);
-    const fwd = (input.isDown('up') ? 1 : 0) - (input.isDown('down') ? 1 : 0);
-    const running = input.isDown('run') && fwd > 0 && !this.noRun;
-    c.root.rotation.y += turn * dt * (this.turnSpeed ?? 2.6);
-    const speed = fwd > 0 ? (running ? 3.7 : 1.75) * (this.speedMul ?? 1) : fwd < 0 ? -1.0 * (this.speedMul ?? 1) : 0;
-    if (speed !== 0) {
-      const yaw = c.root.rotation.y;
+    const ix = (input.isDown('right') ? 1 : 0) - (input.isDown('left') ? 1 : 0);
+    const iz = (input.isDown('up') ? 1 : 0) - (input.isDown('down') ? 1 : 0);
+    const moving = (ix !== 0 || iz !== 0) && (this.speedMul ?? 1) > 0;
+    const running = input.isDown('run') && moving && !this.noRun;
+    if (moving) {
+      // directions relative to the camera: W = away from camera, A/D = strafe
+      const yaw = this.camMode === 'follow' ? this.camYaw : c.root.rotation.y;
+      const fx = Math.sin(yaw), fz = Math.cos(yaw);
+      const rx = -fz, rz = fx; // screen-right
+      let mx = fx * iz + rx * ix, mz = fz * iz + rz * ix;
+      const len = Math.hypot(mx, mz); mx /= len; mz /= len;
+      const target = Math.atan2(mx, mz);
+      c.root.rotation.y = lerpAngle(c.root.rotation.y, target, Math.min(1, dt * 10));
+      const speed = (running ? 3.7 : 1.75) * (this.speedMul ?? 1);
       const p = c.root.position;
-      p.x += Math.sin(yaw) * speed * dt;
-      p.z += Math.cos(yaw) * speed * dt;
+      p.x += mx * speed * dt;
+      p.z += mz * speed * dt;
       this.resolve(p, this.playerRadius ?? 0.28);
       if (c.state !== 'scary') c.state = running ? 'run' : 'walk';
-      ps.stepPhase += dt * Math.abs(speed) * (running ? 1.6 : 1.9);
+      ps.stepPhase += dt * speed * (running ? 1.6 : 1.9);
       if (ps.stepPhase > 1) { ps.stepPhase -= 1; audio.step(this.surface, running); }
     } else if (c.state === 'walk' || c.state === 'run') c.state = 'idle';
-    else if (turn !== 0 && c.state === 'idle') { ps.stepPhase += dt * 1.5; if (ps.stepPhase > 1) { ps.stepPhase -= 1; audio.step(this.surface, false); } }
 
     // triggers
     for (const t of this.triggers) {
@@ -358,6 +370,7 @@ export class Game {
     this.time += dt;
     globalUniforms.uTime.value += dt;
 
+    input.beginFrame();
     if (!this.paused) {
       // tasks
       const tasks = this.tasks;

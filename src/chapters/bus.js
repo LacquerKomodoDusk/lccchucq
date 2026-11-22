@@ -348,7 +348,7 @@ export default {
     const camOff = headCamera(g, hero);
     await g.tween(0.8, (k) => { hero.lookYaw = yawTo + (-0.9 - yawTo) * k; });
     g.ui.objective('Посмотри на неё. Украдкой.');
-    g.ui.subtitle('A / D — повернуть голову', 4);
+    g.ui.subtitle('Мышь или A / D — повернуть голову', 4);
     let shared = 0;
     const NEED = 3;
     const glance = { on: false, t: 0, cool: 3.5, dur: 1.5 };
@@ -357,7 +357,7 @@ export default {
     await g.until(() => {
       const dt = g.dt;
       const turn = (input.isDown('left') ? 1 : 0) - (input.isDown('right') ? 1 : 0);
-      hero.lookYaw = Math.max(-1.3, Math.min(1.3, hero.lookYaw + turn * dt * 1.4));
+      hero.lookYaw = Math.max(-1.3, Math.min(1.3, hero.lookYaw + turn * dt * 1.4 - input.mouseDX * 0.0028));
       if (window.__autoplay) hero.lookYaw = lookAtYaw(hero, girl.eyePos(), 1.3);
       const heroLooks = isLooking(hero, girl.eyePos(), 0.97);
       stare = heroLooks ? stare + dt : Math.max(0, stare - dt * 2);

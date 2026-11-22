@@ -8,7 +8,8 @@ import * as T from './engine/textures.js';
 import { showViewer } from './viewer.js';
 import { startAutoplay } from './debug/autoplay.js';
 
-const game = new Game(document.getElementById('screen'));
+const canvas = document.getElementById('screen');
+const game = new Game(canvas);
 window.__game = game; // debug / automated tests
 window.__input = input;
 
@@ -68,6 +69,7 @@ function settingsItems() {
     { label: () => `Эффект ЭЛТ: ${s.crt ? 'ВКЛ' : 'ВЫКЛ'}`, action() { s.crt = !s.crt; game.applySettings(); game.writeSave(); renderMenu(); } },
     { label: () => `Музыка: ◀ ${pct(s.music)} ▶`, action() {}, left() { s.music = Math.max(0, +(s.music - 0.1).toFixed(1)); game.applySettings(); game.writeSave(); }, right() { s.music = Math.min(1, +(s.music + 0.1).toFixed(1)); game.applySettings(); game.writeSave(); } },
     { label: () => `Звуки: ◀ ${pct(s.sfx)} ▶`, action() {}, left() { s.sfx = Math.max(0, +(s.sfx - 0.1).toFixed(1)); game.applySettings(); game.writeSave(); }, right() { s.sfx = Math.min(1, +(s.sfx + 0.1).toFixed(1)); game.applySettings(); game.writeSave(); } },
+    { label: () => `Мышь: ◀ ${pct(s.mouse ?? 1)} ▶`, action() {}, left() { s.mouse = Math.max(0.2, +((s.mouse ?? 1) - 0.1).toFixed(1)); input.mouse.sens = s.mouse; game.writeSave(); }, right() { s.mouse = Math.min(3, +((s.mouse ?? 1) + 0.1).toFixed(1)); input.mouse.sens = s.mouse; game.writeSave(); } },
     { label: 'Полный экран', action: toggleFullscreen },
   ];
 }
@@ -95,12 +97,13 @@ function titleScene() {
   audio.stopAllAmbience();
   audio.ambience('rain', true, 0.6);
   audio.playMusic('theme', { fade: 3 });
-  document.title = 'THE LAST MEMORY';
+  document.title = 'ВОПРЕКИ';
   game.fade(0, 2).catch(() => {});
 }
 
 function showTitle() {
   running = false;
+  input.releaseLock();
   game.paused = false;
   game.ui.clearAll();
   titleScene();
@@ -135,6 +138,7 @@ function chapterSelect() {
 
 function pause() {
   if (!running || menu) return;
+  input.releaseLock();
   game.paused = true;
   input.setFrozen(true);
   $('#pause-screen .menu-head').textContent = 'ПАУЗА';
@@ -147,11 +151,12 @@ function pause() {
   openMenu($('#pause-screen'), items, resume);
 }
 function pauseMenuBack() { openMenu($('#pause-screen'), pauseMenuBack.items, resume); }
-function resume() { closeMenu(); game.paused = false; input.setFrozen(false); }
+function resume() { closeMenu(); game.paused = false; input.setFrozen(false); input.requestLock(canvas); }
 
 /* ------------------------------------------------------------------ run */
 
 async function start(index) {
+  input.requestLock(canvas); // must happen inside the click / key gesture
   closeMenu();
   $('#title-screen').classList.add('hidden');
   running = true;
@@ -162,6 +167,7 @@ async function start(index) {
   audio.stopAllAmbience();
   game.ui.clearAll();
   const session = game.session;
+  if (!input.mouse.locked) game.ui.toast('Кликните по экрану — камера управляется мышью', { dur: 6 });
   try {
     for (let i = index; i < CHAPTERS.length; i++) {
       game.save.current = i;
@@ -189,7 +195,7 @@ async function credits() {
   game.camSet([0, 0, 5], [0, 0, 0]);
   game.setFade(1);
   const lines = [
-    'THE LAST MEMORY',
+    'ВОПРЕКИ',
     'Посвящается моей жене\nи нашим сыновьям.',
     'История — реальная.\nМир — из снов и воспоминаний.',
     'Мы не обязаны побеждать друг друга.',
@@ -210,6 +216,11 @@ game.onFrame = () => {
   if (menu) menuInput();
   else if (running && input.rawPressed('pause') && !game.noPause) pause();
 };
+
+// mouse camera: click the game to capture the cursor, Esc releases it (and pauses)
+canvas.addEventListener('click', () => { if (running && !menu && !game.paused) input.requestLock(canvas); });
+input.mouse.onLockChange = (locked) => { if (!locked && running && !menu && !game.paused) pause(); };
+input.mouse.sens = game.save.settings.mouse ?? 1;
 
 const gate = $('#start-gate');
 function openGate() {

@@ -32,6 +32,18 @@ const GROUPS = {
 
 let frozen = false;
 
+/* ---------------- mouse (camera) ---------------- */
+const mouse = { dx: 0, dy: 0, accDx: 0, accDy: 0, dragging: false, locked: false, sens: 1 };
+window.addEventListener('mousemove', (e) => {
+  if (mouse.locked || mouse.dragging) { mouse.accDx += e.movementX || 0; mouse.accDy += e.movementY || 0; }
+});
+window.addEventListener('mousedown', (e) => { if (!mouse.locked && e.button === 0 && e.target && e.target.id === 'screen') mouse.dragging = true; });
+window.addEventListener('mouseup', () => { mouse.dragging = false; });
+document.addEventListener('pointerlockchange', () => {
+  mouse.locked = !!document.pointerLockElement;
+  if (mouse.onLockChange) mouse.onLockChange(mouse.locked);
+});
+
 export const input = {
   isDown(name) { if (frozen) return false; return (GROUPS[name] || [name]).some((c) => down.has(c)); },
   pressed(name) { if (frozen) return false; return (GROUPS[name] || [name]).some((c) => pressedQ.has(c)); },
@@ -39,6 +51,13 @@ export const input = {
   /** raw pressed regardless of freeze (menus) */
   rawPressed(name) { return (GROUPS[name] || [name]).some((c) => pressedQ.has(c)); },
   endFrame() { pressedQ.clear(); releasedQ.clear(); },
+  /** per-frame mouse delta (pixels * sensitivity); call beginFrame once per frame */
+  beginFrame() { mouse.dx = frozen ? 0 : mouse.accDx * mouse.sens; mouse.dy = frozen ? 0 : mouse.accDy * mouse.sens; mouse.accDx = 0; mouse.accDy = 0; },
+  get mouseDX() { return mouse.dx; },
+  get mouseDY() { return mouse.dy; },
+  mouse,
+  requestLock(el) { try { const r = el.requestPointerLock?.(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* pointer lock unavailable: drag fallback */ } },
+  releaseLock() { try { if (document.pointerLockElement) document.exitPointerLock(); } catch (e) { /* noop */ } },
   onAny(cb) { anyCb = cb; },
   setFrozen(v) { frozen = v; },
   /** simulate a key (used by tests / touch) */
