@@ -165,6 +165,19 @@ export function handTex(skin, skinDark) {
   }, { key: `hand-${skin}` });
 }
 
+let _blobMat = null;
+function blobMaterial() {
+  if (_blobMat) return _blobMat;
+  const c = document.createElement('canvas'); c.width = c.height = 32;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(16, 16, 2, 16, 16, 16);
+  gr.addColorStop(0, 'rgba(0,0,0,0.55)'); gr.addColorStop(0.6, 'rgba(0,0,0,0.3)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 32, 32);
+  const t = new THREE.CanvasTexture(c);
+  _blobMat = new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  return _blobMat;
+}
+
 /* ---------------------------------------------------------------- geometry helpers */
 
 function boxMesh(w, h, d, mat, { y = -h / 2, x = 0, z = 0 } = {}) {
@@ -471,7 +484,7 @@ export class Character {
       hip.add(boxMesh(0.13 * k, th, 0.14 * k, pants, { y: -th / 2 }));
       const knee = new THREE.Group(); knee.position.y = -th; hip.add(knee);
       knee.add(boxMesh(0.11 * k, sl, 0.12 * k, pants, { y: -sl / 2 }));
-      knee.add(boxMesh(0.11 * k, 0.07 * k, 0.22 * k, shoes, { y: -sl - 0.0, z: 0.04 * k }));
+      knee.add(boxMesh(0.11 * k, 0.07 * k, 0.22 * k, shoes, { y: -sl + 0.035 * k, z: 0.04 * k }));
       return { hip, knee };
     };
     this.legL = mkLeg(1); this.legR = mkLeg(-1);
@@ -484,6 +497,11 @@ export class Character {
       if (s.belt) this.torso.add(boxMesh(0.34 * k, 0.04 * k, 0.23 * k, this.mat({ color: s.belt }), { y: 0.04 * k }));
     }
 
+    // soft blob shadow on the ground (classic PS1 grounding)
+    const blob = new THREE.Mesh(new THREE.CircleGeometry(0.32 * k, 12), blobMaterial());
+    blob.rotation.x = -Math.PI / 2; blob.position.y = 0.012; blob.renderOrder = -1;
+    this.root.add(blob);
+    this.blob = blob;
     this.root.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.userData.character = this; } });
   }
 
@@ -608,6 +626,7 @@ export class Character {
     const p = this.pose;
     const k = this.k;
     this.hips.position.y = 0.9 * k + p.bob - p.sitDrop;
+    if (this.blob) this.blob.visible = this.root.position.y < 0.1 && this.state !== 'lie';
     this.hips.rotation.y = p.hipsY;
     this.hips.rotation.x = p.lean;
     this.torso.rotation.set(p.torsoX, -p.hipsY * 1.4, p.torsoZ + this.turnLean);

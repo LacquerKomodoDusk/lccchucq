@@ -101,19 +101,19 @@ export function pondPark(g, { warm = false, summer = false, snow = false, evenin
   });
   B.plane(g, 80, 80, B.M({ map: snow ? B.snowGround([30, 30]) : T.grassTex([30, 30], summer ? '#5a7a3a' : '#5a6a3a') }), 0, 0, 0);
   // pond (ellipse made from a circle); in November it is dark, with thin ice at the edge
-  const water = new THREE.Mesh(new THREE.CircleGeometry(6, 14), B.M({ map: T.waterTex([4, 4]), color: snow ? '#7a8a94' : '#ffffff', emissive: 0x0a1418 }));
-  water.rotation.x = -Math.PI / 2; water.scale.set(1.4, 1, 1); water.position.set(0, 0.02, 0);
+  const water = new THREE.Mesh(new THREE.CircleGeometry(6, 24), B.M({ map: T.waterTex([4, 4]), color: snow ? '#7a8a94' : '#ffffff', emissive: 0x0a1418 }));
+  water.rotation.x = -Math.PI / 2; water.scale.set(1.4, 1, 1); water.position.set(0, 0.04, 0);
   g.add(water);
   if (snow) {
-    const ice = new THREE.Mesh(new THREE.RingGeometry(4.6, 6, 14), B.M({ color: '#b8c8d4', transparent: true, opacity: 0.75 }));
-    ice.rotation.x = -Math.PI / 2; ice.scale.set(1.4, 1, 1); ice.position.y = 0.025; g.add(ice);
+    const ice = new THREE.Mesh(new THREE.RingGeometry(4.6, 6, 24, 2), B.M({ color: '#b8c8d4', transparent: true, opacity: 0.75 }));
+    ice.rotation.x = -Math.PI / 2; ice.scale.set(1.4, 1, 1); ice.position.y = 0.06; g.add(ice);
   }
-  const shore = new THREE.Mesh(new THREE.RingGeometry(6, 6.8, 14), B.M({ map: T.noiseTex(snow ? '#b8bcc2' : '#6a5a42', { amount: 0.3, seed: 2 }) }));
-  shore.rotation.x = -Math.PI / 2; shore.scale.set(1.4, 1, 1); shore.position.y = 0.015; g.add(shore);
+  const shore = new THREE.Mesh(new THREE.RingGeometry(6, 6.8, 24, 1), B.M({ map: T.noiseTex(snow ? '#b8bcc2' : '#6a5a42', { amount: 0.3, seed: 2 }) }));
+  shore.rotation.x = -Math.PI / 2; shore.scale.set(1.4, 1, 1); shore.position.y = 0.03; g.add(shore);
   g.onUpdate((dt) => { water.material.map.offset.x += dt * (snow ? 0.003 : 0.01); });
   // path ring (trodden snow in winter)
-  const path = new THREE.Mesh(new THREE.RingGeometry(8, 9.4, 20), B.M({ map: T.noiseTex(snow ? '#a4a6ac' : '#8a7a62', { amount: 0.25, seed: 4 }) }));
-  path.rotation.x = -Math.PI / 2; path.scale.set(1.3, 1, 1); path.position.y = 0.01; g.add(path);
+  const path = new THREE.Mesh(new THREE.RingGeometry(8, 9.4, 32, 2), B.M({ map: T.noiseTex(snow ? '#a4a6ac' : '#8a7a62', { amount: 0.25, seed: 4 }) }));
+  path.rotation.x = -Math.PI / 2; path.scale.set(1.3, 1, 1); path.position.y = 0.02; g.add(path);
   const snowCap = B.M({ color: '#eef0f4' });
   for (let i = 0; i < 22; i++) {
     const a = (i / 22) * Math.PI * 2, d = 12 + (i % 3) * 3;
@@ -206,7 +206,7 @@ export function playground(g, { warm = true } = {}) {
   g.newScene({ bg, fog: [bg, 10, 48], hemi: warm ? [0xffe8c8, 0x5a5040, 1.1] : [0xc8ccd4, 0x404040, 0.9], sun: [0xffd8a0, warm ? 0.85 : 0.4, [-6, 7, 4]] });
   B.plane(g, 90, 90, B.M({ map: T.grassTex([30, 30], '#5e6a44') }), 0, -0.01, 0);
   // rubber / sand ground of the playground
-  B.plane(g, 20, 16, B.M({ map: T.noiseTex('#8a7a62', { amount: 0.25, seed: 61, repeat: [8, 6] }) }), 0, 0, 0);
+  B.plane(g, 20, 16, B.M({ map: T.noiseTex('#8a7a62', { amount: 0.25, seed: 61, repeat: [8, 6] }) }), 0, 0.02, 0);
   const W = 10, D = 8;
   // fence with a gate on the south side
   const fc = { color: '#3a4a3a', height: 1.0 };
@@ -245,7 +245,7 @@ export function playground(g, { warm = true } = {}) {
   const wood = B.M({ map: T.woodTex([2, 1], '#6a4a30') });
   B.box(g, 3, 0.3, 0.15, wood, 4.5, 0, 3.2); B.box(g, 3, 0.3, 0.15, wood, 4.5, 0, 5.8);
   B.box(g, 0.15, 0.3, 2.6, wood, 3.0, 0, 4.5); B.box(g, 0.15, 0.3, 2.6, wood, 6.0, 0, 4.5);
-  B.plane(g, 2.8, 2.5, B.M({ map: T.noiseTex('#c8b088', { amount: 0.2, seed: 7 }) }), 4.5, 0.15, 4.5);
+  B.plane(g, 2.8, 2.5, B.M({ map: T.noiseTex('#c8b088', { amount: 0.2, seed: 7 }) }), 4.5, 0.18, 4.5);
   B.box(g, 0.25, 0.25, 0.25, B.M({ color: '#c84a3a' }), 4.0, 0.15, 4.2);
   g.collider(2.9, 6.1, 3.1, 5.9);
   // carousel
@@ -276,7 +276,7 @@ export function toyWarehouse(g) {
   B.room(g, { w: W, d: D, h: H, floor: B.M({ map: T.warehouseFloorTex([9, 7]) }), wall: B.M({ map: T.corrugatedTex([12, 3]) }), ceil: B.M({ color: '#2a2c30' }) });
   // yellow safety lines along the aisles
   const yellow = B.M({ color: '#c8a030', unlit: false });
-  for (const z of [-3.1, 0.9, 4.9]) B.plane(g, 14, 0.08, yellow, 0, 0.005, z);
+  for (const z of [-3.1, 0.9, 4.9]) B.plane(g, 14, 0.08, yellow, 0, 0.02, z);
   // racks: 3 rows, 3 levels, full of toy boxes
   const upright = B.M({ color: '#2a4a7a' });
   const beam = B.M({ color: '#d0781e' });

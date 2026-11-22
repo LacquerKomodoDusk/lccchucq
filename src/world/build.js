@@ -6,8 +6,11 @@ import * as T from '../engine/textures.js';
 
 export const M = (o) => ps1Material(o);
 
+// large polygons wobble and "sink" with PS1 vertex snapping, so big surfaces are tessellated
+const seg = (v) => Math.max(1, Math.min(24, Math.ceil(v / 1.2)));
 export function box(g, w, h, d, mat, x = 0, y = 0, z = 0, { solid = false, pad = 0, rotY = 0, parent = null } = {}) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  const big = w > 2.5 || h > 2.5 || d > 2.5;
+  const mesh = new THREE.Mesh(big ? new THREE.BoxGeometry(w, h, d, seg(w), seg(h), seg(d)) : new THREE.BoxGeometry(w, h, d), mat);
   mesh.position.set(x, y + h / 2, z);
   mesh.rotation.y = rotY;
   (parent || g.scene).add(mesh);
@@ -20,7 +23,7 @@ export function box(g, w, h, d, mat, x = 0, y = 0, z = 0, { solid = false, pad =
 }
 
 export function plane(g, w, d, mat, x = 0, y = 0, z = 0, rotX = -Math.PI / 2) {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d, Math.max(1, Math.round(w / 4)), Math.max(1, Math.round(d / 4))), mat);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d, Math.min(48, seg(w)), Math.min(160, seg(d))), mat);
   m.rotation.x = rotX; m.position.set(x, y, z);
   g.scene.add(m);
   return m;

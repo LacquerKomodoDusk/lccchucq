@@ -39,6 +39,8 @@ export class UI {
     d.querySelector('.next').style.visibility = 'hidden';
     const state = { shown: 0, full: text, done: false, t: 0, auto: opts.auto ?? null, speed: opts.speed ?? 40, closed: false };
     this.dlg = state;
+    // cutscene dialogue: cut between speakers with varied shots
+    const shot = speaker && !opts.shout && !opts.noCam && g.dialogShot(speaker);
     let lastBlip = 0;
     return g.until(() => {
       const dt = g.dt;
@@ -55,7 +57,9 @@ export class UI {
       }
       state.t += dt;
       if ((state.auto && state.t > state.auto) || (!state.auto && input.pressed('act'))) {
-        d.classList.add('hidden'); this.dlg = null; g.actConsumed = true; return true;
+        d.classList.add('hidden'); this.dlg = null; g.actConsumed = true;
+        if (shot) g.endDialogShot();
+        return true;
       }
       return false;
     }, () => { d.classList.add('hidden'); this.dlg = null; });
@@ -88,13 +92,15 @@ export class UI {
     const render = () => items.forEach((it, i) => it.classList.toggle('sel', i === sel));
     render();
     let armed = false;
+    // a choice is on screen: the hero must not walk (W/S select the line)
+    this.dlg = { choice: true };
     return g.until(() => {
       if (!armed) { armed = true; return false; }
       if (input.pressed('up')) { sel = (sel + items.length - 1) % items.length; render(); audio.blip(); }
       if (input.pressed('down')) { sel = (sel + 1) % items.length; render(); audio.blip(); }
-      if (input.pressed('act') || clicked) { audio.confirm(); g.actConsumed = true; d.classList.add('hidden'); box.innerHTML = ''; return { value: sel }; }
+      if (input.pressed('act') || clicked) { audio.confirm(); g.actConsumed = true; d.classList.add('hidden'); box.innerHTML = ''; this.dlg = null; return { value: sel }; }
       return false;
-    }, () => { d.classList.add('hidden'); box.innerHTML = ''; }).then((r) => r.value);
+    }, () => { d.classList.add('hidden'); box.innerHTML = ''; this.dlg = null; }).then((r) => r.value);
   }
 
   /* ---------------------------------------------------------- misc overlays */
@@ -156,6 +162,7 @@ export class UI {
   }
 
   update(dt) {
+    document.getElementById('hud').classList.toggle('dlg-open', !this.el.dialogue.classList.contains('hidden'));
     if (this.toastTimer > 0) { this.toastTimer -= dt; if (this.toastTimer <= 0) this.el.toast.classList.add('hidden'); }
     if (this.subTimer > 0) { this.subTimer -= dt; if (this.subTimer <= 0) this.el.subtitle.classList.add('hidden'); }
   }

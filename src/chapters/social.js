@@ -4,6 +4,7 @@ import { input } from '../engine/input.js';
 import * as B from '../world/build.js';
 import * as T from '../engine/textures.js';
 import { STORY } from '../config/story.js';
+import { YOUNG } from '../config/family.js';
 import { spawnHero, think, chapterStart, endMemory, waitInteract, fourthWall, V3 } from './common.js';
 import { dreamSegment } from './dream.js';
 
@@ -39,7 +40,7 @@ export default {
     B.windowPane(g, 0, 1.5, -2.12, 1.2, 1.0, 0, { color: '#1a2238', emissive: 0x0a1020 });
     const phoneM = B.M({ color: '#111', emissive: 0x000000 });
     const phoneMesh = B.box(g, 0.08, 0.015, 0.15, phoneM, 1.0, 0.76, -1.6);
-    const hero = spawnHero(g, 'everyday', [-0.2, 0, 1.2], Math.PI);
+    const hero = spawnHero(g, 'everyday', [-0.2, 0, 1.2], Math.PI, { extra: YOUNG });
     g.followCamera({ dist: 2.3, height: 1.7, lookH: 1.3 });
     g.snapCamera();
     audio.ambience('room', true, 0.5);

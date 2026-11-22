@@ -129,3 +129,4 @@ body { font-family: var(--font-txt); }
 #letterbox.on .bar { height: 11vh; }
 #dialogue.shout { border-color: #8a3a32; animation: jitter 0.09s infinite; }
 #dialogue.shout .text { color: #f0d0c8; font-weight: bold; }
+#hud.dlg-open #subtitle { bottom: calc(5% + 150px); }

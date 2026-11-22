@@ -7,7 +7,7 @@ import * as B from '../world/build.js';
 import * as T from '../engine/textures.js';
 import { NightmareFigure } from '../engine/character.js';
 import { globalUniforms } from '../engine/ps1.js';
-import { heroSpec, wifeSpec, CHILDREN, WIFE_BASE } from '../config/family.js';
+import { heroSpec, wifeSpec, CHILDREN, WIFE_BASE, YOUNG } from '../config/family.js';
 import { STORY } from '../config/story.js';
 import { buildBusWorld, lookAtYaw, sitAt, HERO_SEAT, GIRL_SEAT } from './bus.js';
 import { think, chapterStart, setWorldMood, glitchBurst, fourthWall, V3 } from './common.js';
@@ -200,7 +200,7 @@ export default {
       const p = g.spawn({ ...heroSpec('everyday'), beard: null, hair: '#3a3430', hairStyle: 'short', top: c, coat: c, longCoat: false, backpack: null, height: 1.72, skin: '#b0a098', thickBrows: false }, [x, 0.02, z + 0.05], 0);
       p.state = 'sit'; p.setExpression('closed');
     }
-    const h2 = g.spawn(heroSpec('trench'), [0, 0, 0], 0);
+    const h2 = g.spawn(heroSpec('trench', YOUNG), [0, 0, 0], 0);
     g.setPlayer(h2, { control: false });
     sitAt(h2, HERO_SEAT);
     h2.lookYaw = -1.05;
@@ -342,11 +342,11 @@ export default {
     g.handheld = 0.35;
     g.pushIn(0.35, 4).catch(() => {});
     await g.wait(1.2);
-    await g.ui.say('Она', STORY.wifeFinal);
+    await g.ui.say('Она', STORY.wifeFinal, { noCam: true });
     g.camSet([-0.55, 1.7, -0.85], [0, 1.58, 0.42]);
     g.pushIn(0.3, 4).catch(() => {});
     h3.setExpression('sad');
-    await g.ui.say('Ты', STORY.heroFinal);
+    await g.ui.say('Ты', STORY.heroFinal, { noCam: true });
     h3.setExpression('closed'); wife.setExpression('closed');
     // the silent embrace: the camera slowly pulls back and rises
     g.handheld = 0;
@@ -382,7 +382,7 @@ export default {
     g.newScene({ bg: 0x6a6c72, fog: [0x6a6c72, 8, 80], hemi: [0xb8bcc8, 0x3a3a40, 1.0], sun: [0xd8dce8, 0.35, [-3, 8, 4]] });
     setWorldMood(g, { sat: 0.7, tint: [0.98, 0.99, 1.03], noise: 0.03 });
     B.plane(g, 8, 240, B.M({ map: T.asphaltTex([3, 80], true) }), 0, 0, -100);
-    B.plane(g, 0.2, 240, B.M({ map: T.roadLineTex([1, 80]), unlit: true }), 0, 0.01, -100);
+    B.plane(g, 0.2, 240, B.M({ map: T.roadLineTex([1, 80]), unlit: true }), 0, 0.03, -100);
     B.plane(g, 80, 240, B.M({ map: T.grassTex([30, 80], '#3e4636') }), 0, -0.03, -100);
     for (let z = 6; z > -200; z -= 12) {
       B.lampPost(g, 5, z, { on: false, solid: false });
@@ -390,8 +390,8 @@ export default {
       B.tree(g, 10 + Math.random() * 8, z - 7, { solid: false, autumn: false, color: '#3e4a36', h: 4 + Math.random() * 3 });
     }
     // wet reflections of the sky on the road
-    const sheen = new THREE.Mesh(new THREE.PlaneGeometry(7, 240), B.M({ color: '#a8acb8', unlit: true, transparent: true, opacity: 0.08, depthWrite: false }));
-    sheen.rotation.x = -Math.PI / 2; sheen.position.set(0, 0.02, -100); g.add(sheen);
+    const sheen = new THREE.Mesh(new THREE.PlaneGeometry(7, 240, 6, 160), B.M({ color: '#a8acb8', unlit: true, transparent: true, opacity: 0.08, depthWrite: false }));
+    sheen.rotation.x = -Math.PI / 2; sheen.position.set(0, 0.015, -100); g.add(sheen);
     const roadRain = B.rain(g, { count: 1200, area: 36, speed: 11 });
     g.surface = 'wet';
     g.bounds = (p) => { p.x = Math.max(-3.5, Math.min(3.5, p.x)); };

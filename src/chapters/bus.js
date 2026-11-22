@@ -9,7 +9,7 @@ import { audio } from '../engine/audio.js';
 import { input } from '../engine/input.js';
 import * as B from '../world/build.js';
 import * as T from '../engine/textures.js';
-import { heroSpec, wifeSpec } from '../config/family.js';
+import { heroSpec, wifeSpec, YOUNG } from '../config/family.js';
 import { think, chapterStart, endMemory, isLooking, setWorldMood, V3 } from './common.js';
 import { lerpAngle } from '../engine/game.js';
 
@@ -32,7 +32,7 @@ export function buildBusWorld(g, { fogColor = 0x4c4a58 } = {}) {
   const capture = (fn) => { const before = new Set(scene.children); fn(); return [...scene.children].filter((c) => !before.has(c)); };
   const groundPlanes = capture(() => {
     B.plane(g, 7, 400, B.M({ map: T.leavesTex([3, 160], '#34343e', 6) }), 1.0, -0.42, -80);
-    B.plane(g, 0.2, 400, B.M({ map: T.roadLineTex([1, 120]), unlit: true }), 2.6, -0.41, -80);
+    B.plane(g, 0.2, 400, B.M({ map: T.roadLineTex([1, 120]), unlit: true }), 2.6, -0.39, -80);
     B.plane(g, 3, 400, B.M({ map: T.leavesTex([2, 150], '#4a4850', 26) }), -3.9, -0.25, -80);
     B.plane(g, 30, 400, B.M({ map: T.leavesTex([10, 120], '#3a3a30', 30) }), -19, -0.3, -80);
     B.plane(g, 30, 400, B.M({ map: T.leavesTex([10, 120], '#3a3a30', 30) }), 19, -0.44, -80);
@@ -262,7 +262,7 @@ export default {
     }
 
     /* ---------- 1. at the bus stop, the bus approaches ---------- */
-    const hero = g.spawn(heroSpec('trench'), [-4.3, -0.25, 4.6], Math.PI);
+    const hero = g.spawn(heroSpec('trench', YOUNG), [-4.3, -0.25, 4.6], Math.PI);
     g.setPlayer(hero, { control: false });
     g.surface = 'wet';
     g.followCamera({ dist: 2.4, height: 1.75, lookH: 1.45, side: -0.45 });

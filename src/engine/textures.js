@@ -8,18 +8,57 @@ function rng(seed) {
   return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
 }
 
-export function canvasTexture(w, h, draw, { repeat = [1, 1], key = null } = {}) {
+/**
+ * Painterly detail pass: upsample the pixel design (nearest) to at least 64 px,
+ * then add seamless low-frequency mottling, fine grain and specks — the
+ * hand-painted PS1 look of the artbook. Tiling stays seamless.
+ */
+function addDetail(src, w, h, seed) {
+  const scale = Math.max(1, Math.ceil(64 / Math.min(w, h)));
+  const W = w * scale, H = h * scale;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.drawImage(src, 0, 0, W, H);
+  const img = g.getImageData(0, 0, W, H);
+  const d = img.data;
+  const r = rng(seed);
+  // periodic value-noise grid for mottling
+  const cells = Math.max(2, Math.round(W / 12)), cellsY = Math.max(2, Math.round(H / 12));
+  const grid = new Float32Array(cells * cellsY);
+  for (let i = 0; i < grid.length; i++) grid[i] = r() * 2 - 1;
+  const at = (x, y) => grid[((y % cellsY) + cellsY) % cellsY * cells + ((x % cells) + cells) % cells];
+  for (let y = 0; y < H; y++) {
+    const gy = (y / H) * cellsY, y0 = Math.floor(gy), fy = gy - y0, sy = fy * fy * (3 - 2 * fy);
+    for (let x = 0; x < W; x++) {
+      const gx = (x / W) * cells, x0 = Math.floor(gx), fx = gx - x0, sx = fx * fx * (3 - 2 * fx);
+      const n = (at(x0, y0) * (1 - sx) + at(x0 + 1, y0) * sx) * (1 - sy) + (at(x0, y0 + 1) * (1 - sx) + at(x0 + 1, y0 + 1) * sx) * sy;
+      const i = (y * W + x) * 4;
+      if (d[i + 3] === 0) continue;
+      let k = 1 + n * 0.07 + (r() - 0.5) * 0.07;
+      if (r() < 0.004) k *= 0.75; // tiny specks of dirt
+      d[i] = Math.min(255, d[i] * k); d[i + 1] = Math.min(255, d[i + 1] * k); d[i + 2] = Math.min(255, d[i + 2] * k * 0.995);
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return c;
+}
+
+let detailSeed = 1;
+export function canvasTexture(w, h, draw, { repeat = [1, 1], key = null, detail = true } = {}) {
   if (key && cache.has(key)) {
     const t = cache.get(key).clone();
     t.repeat.set(repeat[0], repeat[1]);
     t.needsUpdate = true;
     return t;
   }
-  const c = document.createElement('canvas');
+  let c = document.createElement('canvas');
   c.width = w; c.height = h;
   const g = c.getContext('2d');
   g.imageSmoothingEnabled = false;
   draw(g, w, h);
+  const noDetail = !detail || (key && /^(face|glow|sky|text)/.test(key));
+  if (!noDetail) c = addDetail(c, w, h, detailSeed++ * 977);
   const t = new THREE.CanvasTexture(c);
   t.magFilter = THREE.NearestFilter;
   t.minFilter = THREE.NearestFilter;
@@ -208,7 +247,7 @@ export function textTex(text, { w = 128, h = 32, color = '#ddd', bg = 'rgba(0,0,
     g.textAlign = 'center'; g.textBaseline = 'middle';
     const lines = text.split('\n');
     lines.forEach((ln, i) => g.fillText(ln, w / 2, h / 2 + (i - (lines.length - 1) / 2) * (font + 2)));
-  });
+  }, { detail: false });
 }
 
 export function glowSpriteTex(color = '#ffe8a0') {

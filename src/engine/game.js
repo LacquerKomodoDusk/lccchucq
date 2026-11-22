@@ -15,7 +15,7 @@ const V = () => new THREE.Vector3();
 export class Game {
   constructor(canvas) {
     this.r = new PS1Renderer(canvas);
-    this.camera = new THREE.PerspectiveCamera(60, this.r.aspect, 0.05, 200);
+    this.camera = new THREE.PerspectiveCamera(60, this.r.aspect, 0.1, 160);
     this.r.onResize = (a) => { this.camera.aspect = a; this.camera.updateProjectionMatrix(); };
     this.camera.aspect = this.r.aspect; this.camera.updateProjectionMatrix();
     this.ui = new UI(this);
@@ -89,6 +89,8 @@ export class Game {
     this.speedMul = 1;
     this.turnSpeed = 2.6;
     this.debugGoal = null;
+    this.dlgCam = null;
+    this.lockCam = false;
     this.handheld = 0;
     this.shakeAmt = 0;
     this.activeInteract = null;
@@ -119,6 +121,10 @@ export class Game {
       this.sun = new THREE.DirectionalLight(s[0], s[1]);
       this.sun.position.set(...s[2]);
       this.scene.add(this.sun);
+      // soft fill from the opposite side, tinted toward the sky colour (warm key / cool fill)
+      this.fill = new THREE.DirectionalLight(new THREE.Color(h[0]).lerp(new THREE.Color(0x8090b0), 0.5), s[1] * 0.35);
+      this.fill.position.set(-s[2][0], s[2][1] * 0.6, -s[2][2]);
+      this.scene.add(this.fill);
     }
     this.ui.prompt(null); this.ui.objective(null); this.ui.meter(null); this.ui.battle(false);
     this.camera.fov = 60; this.camera.updateProjectionMatrix();
@@ -431,6 +437,93 @@ export class Game {
 
   /** reset lens after a cinematic shot */
   resetLens() { this.camera.fov = 60; this.camera.updateProjectionMatrix(); this.handheld = 0; this.letterbox(false); }
+
+  /* ---------------- dialogue coverage (shot / reverse shot) ---------------- */
+
+  /** find the character who speaks a line */
+  speakerChar(name) {
+    if (name === 'Ты') return this.player;
+    if (name === 'Она') {
+      let best = null, bd = 1e9;
+      for (const c of this.chars) {
+        if (!c.spec || c.spec.name !== 'wife' || !c.root.visible) continue;
+        const d = this.player ? c.root.position.distanceTo(this.player.root.position) : 0;
+        if (d < bd) { bd = d; best = c; }
+      }
+      return best;
+    }
+    return null;
+  }
+
+  /**
+   * Cut to a dialogue shot for this line: over-the-shoulder, close-up or two-shot,
+   * varied line by line. Returns false if no shot was taken.
+   */
+  dialogShot(name) {
+    if (this.lockCam || (this.controlEnabled && !this.busy)) return false;
+    const S = this.speakerChar(name);
+    if (!S) return false;
+    const L = name === 'Ты' ? this.speakerChar('Она') : this.player;
+    if (!this.dlgCam) this.dlgCam = { n: 0, saved: null };
+    const dc = this.dlgCam;
+    if (!dc.saved) dc.saved = { mode: this.camMode, pos: this.camera.position.clone(), look: this.camLook ? this.camLook.clone() : null, fov: this.camera.fov, fixed: { ...this.camFixed, pos: this.camFixed.pos.clone(), look: this.camFixed.look.clone() } };
+    clearTimeout(dc.restoreT);
+    const se = S.eyePos();
+    const n = dc.n++;
+    const near = L && L !== S && L.root.position.distanceTo(S.root.position) < 4;
+    const shots = [];
+    if (near) {
+      const le = L.eyePos();
+      const axis = new THREE.Vector3(se.x - le.x, 0, se.z - le.z).normalize();
+      const right = new THREE.Vector3(-axis.z, 0, axis.x);
+      const side = n % 2 ? 1 : -1;
+      // over the listener's shoulder onto the speaker
+      const gap = L.root.position.distanceTo(S.root.position);
+      if (gap < 2.6) shots.push({ pos: le.clone().addScaledVector(axis, -1.0).addScaledVector(right, 0.5 * side).add(new THREE.Vector3(0, 0.12, 0)), look: se.clone().add(new THREE.Vector3(0, -0.05, 0)), fov: 40 });
+      // close-up of the speaker, slightly off-axis
+      shots.push({ pos: se.clone().addScaledVector(axis, -1.25).addScaledVector(right, 0.55 * side).add(new THREE.Vector3(0, -0.02, 0)), look: se.clone().add(new THREE.Vector3(0, -0.08, 0)), fov: 32 });
+      // two-shot from the side
+      const mid = se.clone().lerp(le, 0.5);
+      shots.push({ pos: mid.clone().addScaledVector(right, 2.6 * side).add(new THREE.Vector3(0, 0.05, 0)), look: mid.clone().add(new THREE.Vector3(0, -0.15, 0)), fov: 44 });
+    } else {
+      const f = S.headDir();
+      shots.push({ pos: se.clone().addScaledVector(f, 1.3).add(new THREE.Vector3(0.3, 0, 0)), look: se.clone(), fov: 34 });
+    }
+    const order = [0, 1, 0, 2, 1, 0];
+    let shot = shots[order[n % order.length] % shots.length];
+    // never put the camera inside a wall: fall back to another framing
+    for (let i = 0; i < shots.length && this.pointBlocked(shot.pos.x, shot.pos.z, 0.1); i++) shot = shots[(order[n % order.length] + i + 1) % shots.length];
+    if (this.pointBlocked(shot.pos.x, shot.pos.z, 0.1)) return false;
+    this.camMode = 'script';
+    this.camera.fov = shot.fov; this.camera.updateProjectionMatrix();
+    this.camera.position.copy(shot.pos);
+    this.camLook = shot.look.clone();
+    this.camera.lookAt(this.camLook);
+    this.handheld = Math.max(this.handheld ?? 0, 0.25);
+    dc.usedHand = true;
+    dc.shotPos = shot.pos.clone();
+    return true;
+  }
+
+  /** after the last line of an exchange, put the camera back where the scene had it */
+  endDialogShot() {
+    const dc = this.dlgCam;
+    if (!dc || !dc.saved) return;
+    clearTimeout(dc.restoreT);
+    dc.restoreT = setTimeout(() => {
+      if (this.ui.dlg) return; // another line already started
+      const sv = dc.saved; dc.saved = null; dc.n = 0;
+      if (this.session !== dc.session) return;
+      if (dc.usedHand) { this.handheld = 0; dc.usedHand = false; }
+      // the script already moved the camera on: leave its new shot alone
+      if (dc.shotPos && this.camera.position.distanceTo(dc.shotPos) > 0.05) return;
+      this.camera.fov = sv.fov; this.camera.updateProjectionMatrix();
+      this.camMode = sv.mode;
+      if (sv.mode !== 'follow') { this.camera.position.copy(sv.pos); if (sv.look) { this.camLook = sv.look; this.camera.lookAt(sv.look); } }
+      if (dc.usedHand) { this.handheld = 0; dc.usedHand = false; }
+    }, 180);
+    dc.session = this.session;
+  }
 
   /** camera shake: amount ~0.1 small, 0.3 strong */
   shake(amount = 0.2, decay = 0.6) { this.shakeAmt = Math.max(this.shakeAmt ?? 0, amount); this.shakeDecay = decay; }

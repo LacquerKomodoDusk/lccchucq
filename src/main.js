@@ -87,7 +87,7 @@ function titleScene() {
   game.abortAll();
   game.newScene({ bg: 0x1a1c20, fog: [0x1a1c20, 3, 30], hemi: [0x7a8090, 0x202020, 0.8], sun: [0xbfc8d8, 0.3, [2, 6, -3]] });
   B.plane(game, 8, 200, B.M({ map: T.asphaltTex([4, 100], true) }), 0, 0, -60);
-  B.plane(game, 0.25, 200, B.M({ map: T.roadLineTex([1, 60]), unlit: true }), 0, 0.01, -60);
+  B.plane(game, 0.25, 200, B.M({ map: T.roadLineTex([1, 60]), unlit: true }), 0, 0.03, -60);
   B.plane(game, 60, 200, B.M({ map: T.grassTex([20, 60], '#3a4232') }), 0, -0.02, -60);
   for (let i = 0; i < 14; i++) { B.lampPost(game, 4.6, -i * 12, { on: i % 3 !== 2, solid: false }); B.bareTree(game, -6 - Math.random() * 6, -i * 9 - 3, { solid: false, h: 4 + Math.random() * 3 }); }
   B.rain(game, { center: new THREE.Vector3(0, 0, -6) }).follow.target = new THREE.Vector3(0, 0, -6);

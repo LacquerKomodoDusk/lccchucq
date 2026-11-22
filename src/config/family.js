@@ -79,3 +79,6 @@ export function heroSpec(outfit = 'everyday', extra = {}) {
 export function wifeSpec(outfit = 'home', extra = {}) {
   return { ...WIFE_BASE, ...(OUTFITS.wife[outfit] || {}), ...extra };
 }
+
+// До рождения первого ребёнка герой без бороды.
+export const YOUNG = { beard: null, beardDark: null };

@@ -5,6 +5,7 @@ import { input } from '../engine/input.js';
 import * as B from '../world/build.js';
 import { apartment, pondPark } from '../world/places.js';
 import { STORY } from '../config/story.js';
+import { YOUNG } from '../config/family.js';
 import { spawnHero, spawnWife, think, chapterStart, endMemory, V3, glitchBurst, embrace } from './common.js';
 import { dreamSegment } from './dream.js';
 
@@ -29,7 +30,7 @@ export default {
 
     /* -------- moving in -------- */
     const A = apartment(g, { boxes: true });
-    const hero = spawnHero(g, 'home', [-3, 0, 2.2], Math.PI);
+    const hero = spawnHero(g, 'home', [-3, 0, 2.2], Math.PI, { extra: YOUNG });
     const her = spawnWife(g, 'home', [1.4, 0, 0.8], -Math.PI / 2);
     g.followCamera({ dist: 2.8, height: 1.9, lookH: 1.3 });
     g.snapCamera();
@@ -75,7 +76,7 @@ export default {
 
     /* -------- the pond: snowy November -------- */
     pondPark(g, { snow: true });
-    const h = spawnHero(g, 'rain', [0, 0, 11], Math.PI);
+    const h = spawnHero(g, 'rain', [0, 0, 11], Math.PI, { extra: YOUNG });
     const w = spawnWife(g, 'busCoat', [1.5, 0, 9.6], Math.PI, { scarf: '#8a6a5a' });
     g.followCamera({ dist: 3.4, height: 2.0, lookH: 1.3 });
     g.snapCamera();
@@ -115,7 +116,7 @@ export default {
     const angOf = (p) => Math.atan2(p.z, p.x / 1.3);
     let ang = angOf(w.root.position);
     let dir = 1;               // direction around the pond
-    let dodges = 0, burst = 0, weave = 0, laughT = 0, stamina = 1, reverseCd = 0;
+    let dodges = 0, burst = 0, weave = 0, laughT = 0, stamina = 1, reverseCd = 0, herBreath = 1, chaseT = 0;
     const wrap = (x) => Math.atan2(Math.sin(x), Math.cos(x));
     let caught = false;
     await g.until(() => {
@@ -124,23 +125,26 @@ export default {
       const d = hp.distanceTo(w.root.position);
       // the player's breath
       const running = input.isDown('run') && g.controlEnabled && h.state === 'run';
-      stamina = running ? Math.max(0, stamina - dt * 0.16) : Math.min(1, stamina + dt * 0.2);
+      stamina = running ? Math.max(0, stamina - dt * 0.09) : Math.min(1, stamina + dt * 0.3);
       if (stamina <= 0) g.noRun = true;
       if (g.noRun && stamina > 0.35) g.noRun = false;
       g.ui.meter('ДЫХАНИЕ', stamina);
       // she dodges when he gets close (three times), then she's laughing too hard to run
-      const tired = dodges >= 3;
+      // she gets out of breath too: slower over time, tired after two dodges or ~20 s
+      chaseT += dt;
+      herBreath = Math.max(0, herBreath - dt * (d < 6 ? 0.05 : 0.02));
+      const tired = dodges >= 2 || chaseT > 20 || herBreath <= 0;
       if (!tired && d < 1.8 && burst <= 0) {
-        dodges++; burst = 0.9; weave = (dodges % 2 ? 1.4 : -1.2);
+        dodges++; burst = 0.6; weave = (dodges % 2 ? 1.2 : -1.0); herBreath -= 0.25;
         audio.laugh();
-        g.ui.subtitle(['Она взвизгнула и увернулась.', 'Она смеётся и снова ускользает.', 'Она уже еле бежит от смеха.'][dodges - 1], 2.5);
+        g.ui.subtitle(['Она взвизгнула и увернулась.', 'Она смеётся — и уже еле бежит.'][dodges - 1], 2.5);
       }
       burst -= dt;
       // if he cuts her off from the front, she turns back
       reverseCd -= dt;
       const ahead = wrap(angOf(hp) - ang) * dir;
-      if (!tired && reverseCd <= 0 && ahead > 0 && ahead < 0.8 && d < 6) { dir = -dir; reverseCd = 2.5; audio.gasp(); }
-      let speed = tired ? 1.5 : burst > 0 ? 5.0 : d < 7 ? 3.0 : 1.7;
+      if (!tired && reverseCd <= 0 && ahead > 0 && ahead < 0.8 && d < 6) { dir = -dir; reverseCd = 4; audio.gasp(); }
+      let speed = tired ? 1.1 : burst > 0 ? 4.0 : (d < 7 ? 2.5 : 1.6) * (0.65 + 0.35 * herBreath);
       ang += dir * (speed / R) * dt;
       weave += (0 - weave) * Math.min(1, dt * 1.5);
       const r = R + weave;
@@ -152,7 +156,8 @@ export default {
       w.setExpression(laughT > 2.5 ? 'joy' : 'fear');
       if (tired && Math.random() < dt * 1.2) audio.laugh();
       if (h.state === 'run' || h.state === 'walk') h.setExpression(laughT > 4 ? 'joy' : 'scary');
-      if (d < 1.1 && tired) caught = true;
+      if (d < 1.2 && (tired || burst <= 0 && dodges >= 1 && herBreath < 0.4)) caught = true;
+      if (tired && !w.root.userData.toldTired) { w.root.userData.toldTired = true; g.ui.subtitle('Она остановилась, задыхаясь от смеха.', 3); }
       return caught;
     });
     g.noRun = false;

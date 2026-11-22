@@ -6,6 +6,7 @@ import * as B from '../world/build.js';
 import { cityStreet, toyWarehouse, pondPark } from '../world/places.js';
 import * as T from '../engine/textures.js';
 import { STORY } from '../config/story.js';
+import { YOUNG } from '../config/family.js';
 import { lerpAngle } from '../engine/game.js';
 import { spawnHero, spawnWife, think, chapterStart, endMemory, waitInteract, waitReach, V3 } from './common.js';
 
@@ -17,7 +18,7 @@ export default {
 
     /* ---------------- the walk ---------------- */
     cityStreet(g, { length: 70 });
-    const hero = spawnHero(g, 'trench', [0.4, 0, 2], Math.PI, { extra: { backpack: null } });
+    const hero = spawnHero(g, 'trench', [0.4, 0, 2], Math.PI, { extra: { backpack: null, ...YOUNG } });
     const her = spawnWife(g, 'date', [-0.6, 0, 1.5], Math.PI);
     g.followCamera({ dist: 3.2, height: 1.9, lookH: 1.4 });
     g.snapCamera();
@@ -85,7 +86,7 @@ export default {
 
     /* ---------------- the toy warehouse, late ---------------- */
     const WH = toyWarehouse(g);
-    const h2 = spawnHero(g, 'work', [6.0, 0, 4.4], -Math.PI / 2);
+    const h2 = spawnHero(g, 'work', [6.0, 0, 4.4], -Math.PI / 2, { extra: YOUNG });
     g.followCamera({ dist: 3.0, height: 2.0, lookH: 1.3 });
     g.snapCamera();
     audio.ambience('hum', true, 0.6);
@@ -141,7 +142,7 @@ export default {
     const seatAt = (dx) => V3(bx + Math.cos(brot) * dx + Math.sin(brot) * 0.05, 0, bz - Math.sin(brot) * dx + Math.cos(brot) * 0.05);
     const bl = B.lamp(g, bx, 3.2, bz + 0.6, 0xffd8a0, 1.4, 6, { bulb: false });
     void bl;
-    const h3 = spawnHero(g, 'trench', [bx + 1.5, 0, bz + 6], Math.PI, { extra: { backpack: null } });
+    const h3 = spawnHero(g, 'trench', [bx + 1.5, 0, bz + 6], Math.PI, { extra: { backpack: null, ...YOUNG } });
     const herSeat = seatAt(0.25);
     const her3 = spawnWife(g, 'date', [herSeat.x, 0.02, herSeat.z], brot);
     her3.state = 'sit';

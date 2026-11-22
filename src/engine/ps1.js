@@ -180,7 +180,7 @@ export class PS1Renderer {
     this.gl = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
     this.gl.setPixelRatio(1);
     this.gl.outputColorSpace = THREE.SRGBColorSpace;
-    this.lowH = 240;
+    this.lowH = 360;
     this.target = new THREE.WebGLRenderTarget(320, 240, {
       minFilter: THREE.NearestFilter,
       magFilter: THREE.NearestFilter,
@@ -197,7 +197,7 @@ export class PS1Renderer {
       uWhite: { value: 0 },
       uSat: { value: 0.85 },
       uTint: { value: new THREE.Vector3(1, 1, 1) },
-      uNoise: { value: 0.035 },
+      uNoise: { value: 0.03 },
     };
     this.postScene = new THREE.Scene();
     this.postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);

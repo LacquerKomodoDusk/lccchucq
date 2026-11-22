@@ -4,6 +4,7 @@ import { audio } from '../engine/audio.js';
 import * as B from '../world/build.js';
 import { apartment, hospital } from '../world/places.js';
 import { STORY } from '../config/story.js';
+import { YOUNG } from '../config/family.js';
 import { spawnHero, spawnWife, think, chapterStart, endMemory, waitInteract, waitReach, V3, setWorldMood, embrace, shout, breakDish } from './common.js';
 
 export default {
@@ -16,7 +17,7 @@ export default {
     apartment(g, {});
     // a bathroom door in the west wall
     B.door(g, -3.93, -1.5, Math.PI / 2, { color: '#8a8070' });
-    const hero = spawnHero(g, 'home', [0.5, 0, 1.2], -Math.PI / 2);
+    const hero = spawnHero(g, 'home', [0.5, 0, 1.2], -Math.PI / 2, { extra: YOUNG });
     g.followCamera({ dist: 2.8, height: 1.85, lookH: 1.35 });
     g.snapCamera();
     audio.ambience('room', true, 0.4);
@@ -36,7 +37,7 @@ export default {
     await g.wait(1.2);
     g.letterbox(true);
     await g.pushIn(0.5, 1.2);
-    await g.ui.say('Она', STORY.papasha);
+    await g.ui.say('Она', STORY.papasha, { noCam: true });
     // his reaction: shock — a dolly-zoom, the room stretches around him
     hero.state = 'fear'; hero.setExpression('fear');
     audio.heartbeat();
@@ -65,7 +66,7 @@ export default {
     apartment(g, { night: true });
     setWorldMood(g, { sat: 0.6 });
     // the kitchen, late evening. They argue standing face to face.
-    const h2 = spawnHero(g, 'everyday', [1.6, 0, -1.0], Math.PI / 2);
+    const h2 = spawnHero(g, 'everyday', [1.6, 0, -1.0], Math.PI / 2, { extra: YOUNG });
     const w2 = spawnWife(g, 'home', [3.2, 0, -1.9], -Math.PI / 2);
     w2.setExpression('sad');
     g.camSet([0.2, 1.5, 0.8], [2.4, 1.2, -1.5]);
@@ -146,7 +147,7 @@ export default {
 
     /* -------- maternity ward -------- */
     hospital(g);
-    const h3 = spawnHero(g, 'everyday', [0, 0, 1.2], Math.PI);
+    const h3 = spawnHero(g, 'everyday', [0, 0, 1.2], Math.PI, { extra: YOUNG });
     const w3 = spawnWife(g, 'home', [4.4, 0, 0.2], -Math.PI / 2);
     w3.setBaby(true); w3.state = 'hold';
     g.followCamera({ dist: 2.6, height: 1.9, lookH: 1.4 });
