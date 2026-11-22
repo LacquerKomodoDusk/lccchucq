@@ -24,8 +24,8 @@ const GROUPS = {
   act: ['KeyE', 'Space', 'Enter', 'NumpadEnter'],
   back: ['Escape', 'Backspace'],
   pause: ['Escape', 'KeyP'],
-  attack: ['KeyJ'],
-  block: ['KeyK'],
+  attack: ['KeyJ', 'Mouse0'],
+  block: ['KeyK', 'Mouse2'],
   breathe: ['KeyQ'],
   face: ['KeyF'],
 };
@@ -37,8 +37,13 @@ const mouse = { dx: 0, dy: 0, accDx: 0, accDy: 0, dragging: false, locked: false
 window.addEventListener('mousemove', (e) => {
   if (mouse.locked || mouse.dragging) { mouse.accDx += e.movementX || 0; mouse.accDy += e.movementY || 0; }
 });
-window.addEventListener('mousedown', (e) => { if (!mouse.locked && e.button === 0 && e.target && e.target.id === 'screen') mouse.dragging = true; });
-window.addEventListener('mouseup', () => { mouse.dragging = false; });
+window.addEventListener('mousedown', (e) => {
+  if (!mouse.locked && e.button === 0 && e.target && e.target.id === 'screen') mouse.dragging = true;
+  // mouse buttons count as keys too (LMB = Mouse0, RMB = Mouse2) when playing on the game screen
+  if (mouse.locked || (e.target && e.target.id === 'screen')) { const code = 'Mouse' + e.button; if (!down.has(code)) pressedQ.add(code); down.add(code); }
+});
+window.addEventListener('mouseup', (e) => { mouse.dragging = false; const code = 'Mouse' + e.button; if (down.has(code)) { down.delete(code); releasedQ.add(code); } });
+window.addEventListener('contextmenu', (e) => { if (mouse.locked || (e.target && e.target.id === 'screen')) e.preventDefault(); });
 document.addEventListener('pointerlockchange', () => {
   mouse.locked = !!document.pointerLockElement;
   if (mouse.onLockChange) mouse.onLockChange(mouse.locked);

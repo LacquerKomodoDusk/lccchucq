@@ -12,6 +12,7 @@ import { STORY } from '../config/story.js';
 import { buildBusWorld, lookAtYaw, sitAt, HERO_SEAT, GIRL_SEAT } from './bus.js';
 import { think, chapterStart, setWorldMood, glitchBurst, fourthWall, V3 } from './common.js';
 import { lerpAngle } from '../engine/game.js';
+import { playFlashback, FLASHBACK_COUNT } from './flashbacks.js';
 
 /* ======================================================================== */
 /*  ARENA                                                                   */
@@ -107,11 +108,16 @@ export default {
     await think(g, 'Вот она. Наконец-то лицом к лицу.');
     audio.playMusic('battle', { fade: 1 });
     g.ui.battle(true, 1, 1, ['ТЫ', 'ОНА']);
-    g.ui.objective('J — удар · K — защита');
+    g.ui.objective('ЛКМ — удар · ПКМ — защита');
     g.control(true);
-    if (window.__autoplay) setTimeout(() => { g.debugGoal = V3(0, 0, 0.05); }, 9000);
+    if (window.__autoplay) {
+      // test path: two blows (two flashbacks), then walk to her
+      const tap = () => { input.simulate('KeyJ', true); setTimeout(() => input.simulate('KeyJ', false), 60); };
+      setTimeout(tap, 1500); setTimeout(tap, 16000);
+      setTimeout(() => { g.debugGoal = V3(0, 0, 0.05); }, 30000);
+    }
     let hpH = 1, hpF = 1;
-    let attacks = 0, blocks = 0, lastAttack = -100, fightTime = 0;
+    let attacks = 0, blocks = 0, lastAttack = -100, fightTime = 0, flashIdx = 0;
     let acting = false;
     const hints = new Set();
     const hint = (k, text, opts) => { if (!hints.has(k)) { hints.add(k); g.ui.subtitle(text, 4); if (opts) fourthWall(g, opts); } };
@@ -143,10 +149,21 @@ export default {
             fig.setGlitch(0);
             await g.wait(0.35);
             hero.state = 'idle'; hero.setExpression('neutral');
+            // every blow throws him back into a memory — and he sees something new in it
+            if (flashIdx < FLASHBACK_COUNT) {
+              g.ui.battle(false);
+              g.ui.objective(null);
+              audio.stopMusic(0.6);
+              await playFlashback(g, flashIdx++);
+              audio.playMusic('battle', { fade: 1 });
+              g.ui.battle(true, hpH, hpF);
+              g.ui.objective('ЛКМ — удар · ПКМ — защита');
+              lastAttack = g.time;
+            }
             if (attacks === 2) hint('a2', 'Она ударила в тот же миг, что и ты.');
             if (attacks === 4) hint('a4', 'Каждый твой удар возвращается к тебе.');
             if (attacks === 5) hint('a5', 'Имена на полосках поменялись местами.', 'Кто здесь кто?');
-            if (attacks >= 6) hint('a6', 'А что, если не бороться?');
+            if (attacks >= 5) hint('a6', 'А что, если не бороться? Подойди к ней.');
             if (hpH <= 0.2) {
               hero.state = 'kneel';
               await think(g, 'Силой здесь не победить.');
@@ -428,40 +445,132 @@ export default {
         wR.state = 'walk';
       } else { wR.state = 'idle'; wR.root.rotation.y = lerpAngle(wR.root.rotation.y, yaw, Math.min(1, dt * 3)); }
     });
-    await g.until(() => hR.root.position.z < kidsZ + 2.6);
+    await g.until(() => hR.root.position.z < kidsZ + 7);
     g.control(false);
     g.debugGoal = null;
     beside();
     g.ui.objective(null);
+    hR.state = 'idle'; wR.state = 'idle';
+    for (const c of [hR, wR]) c.root.rotation.y = Math.PI;
+    g.letterbox(true);
+    g.lockCam = true;
+    const eye = (c) => c.eyePos();
+    // a close-up in front of a character's face, slightly off-axis, with a slow push-in
+    const closeUp = (c, { dist = 0.9, side = 0.25, fov = 32, push = 0.25, dur = 3, up = 0 } = {}) => {
+      const e = eye(c); const f = new THREE.Vector3(Math.sin(c.root.rotation.y + c.lookYaw), 0, Math.cos(c.root.rotation.y + c.lookYaw));
+      const r = new THREE.Vector3(-f.z, 0, f.x);
+      g.camera.fov = fov; g.camera.updateProjectionMatrix();
+      g.camSet(e.clone().addScaledVector(f, dist).addScaledVector(r, side).add(new THREE.Vector3(0, up, 0)).toArray(), e.clone().add(new THREE.Vector3(0, -0.04, 0)).toArray());
+      g.handheld = 0.35;
+      return g.pushIn(push, dur);
+    };
+
+    // 1. wide: the children wait in the rain, the younger one holds his brother's hand
+    k1.state = 'holdHands'; k2.state = 'holdHands';
+    g.camera.fov = 40; g.camera.updateProjectionMatrix();
+    g.camSet([0.6, 0.75, kidsZ - 2.4], [0, 1.2, kidsZ + 6]);
+    g.handheld = 0.3;
+    await g.wait(2.6);
+
+    // 2. the younger son sees them
+    k2.lookYaw = -0.1; k2.lookPitch = -0.15;
+    await closeUp(k2, { dist: 0.75, side: -0.2, fov: 30, push: 0.2, dur: 2 });
+    k2.setExpression('joy');
+    audio.piano(81, audio.now, { vel: 0.3, dur: 4 });
+    await g.wait(1.2);
+
+    // 3. the older one: a little serious — then a shy smile
+    k1.lookYaw = 0.1; k1.lookPitch = -0.12;
+    const cu1 = closeUp(k1, { dist: 0.8, side: 0.22, fov: 30, push: 0.2, dur: 3 });
+    await g.wait(1.2);
+    k1.setExpression('smile');
+    await cu1;
+
+    // 4. her face: tears and a smile
+    wR.setExpression('happycry');
+    audio.setIntensity(2);
+    await closeUp(wR, { dist: 0.95, side: 0.28, fov: 30, push: 0.3, dur: 3 });
+
+    // 5. the younger one lets go and runs to mum; she kneels and opens her arms
+    k2.state = 'idle';
+    g.camera.fov = 46; g.camera.updateProjectionMatrix();
+    wR.state = 'kneelOpen';
+    const toMum = wR.root.position.clone().add(new THREE.Vector3(0, 0, -0.42));
+    const m5 = k2.root.position.clone().lerp(toMum, 0.55);
+    g.camSet([m5.x + 3.0, 1.0, m5.z + 0.6], [m5.x, 0.8, m5.z]);
+    const track5 = g.onUpdate(() => { const p = k2.root.position; g.camLook.lerp(new THREE.Vector3(p.x, 0.8, p.z), 0.1); g.camera.lookAt(g.camLook); });
+    await g.walkTo(k2, [toMum.x, 0, toMum.z], { speed: 3.0, run: true });
+    track5();
+    k2.root.rotation.y = 0; k2.state = 'hug'; wR.state = 'kneelHug';
+    wR.setExpression('closed');
+    audio.laugh();
+    const mumMid = wR.root.position.clone().lerp(k2.root.position, 0.5);
+    g.camOrbit(mumMid, { r0: 1.7, r1: 1.9, h0: 0.95, h1: 1.1, a0: 1.2, a1: 2.0, look: 0.9, dur: 5 }).catch(() => {});
+    await g.wait(2.5);
+
+    // 6. his face
+    hR.setExpression('happycry');
+    await closeUp(hR, { dist: 1.0, side: -0.28, fov: 30, push: 0.3, dur: 2.6 });
+
+    // 7. the older son walks to his father; father kneels; they hold each other
+    k1.state = 'idle';
+    hR.state = 'kneelOpen';
+    g.camera.fov = 44; g.camera.updateProjectionMatrix();
+    const toDad = hR.root.position.clone().add(new THREE.Vector3(0, 0, -0.42));
+    const m7 = k1.root.position.clone().lerp(toDad, 0.6);
+    g.camSet([m7.x - 3.0, 1.0, m7.z + 0.6], [m7.x, 0.8, m7.z]);
+    const track7 = g.onUpdate(() => { const p = k1.root.position; g.camLook.lerp(new THREE.Vector3(p.x, 0.8, p.z), 0.1); g.camera.lookAt(g.camLook); });
+    await g.walkTo(k1, [toDad.x, 0, toDad.z], { speed: 1.7 });
+    track7();
+    k1.root.rotation.y = 0; k1.state = 'hug'; hR.state = 'kneelHug';
+    hR.setExpression('closed'); k1.setExpression('closed');
     audio.setIntensity(3);
-    // the four of them, side by side
-    k1.lookYaw = 0; k2.lookYaw = 0;
-    await Promise.all([
-      g.walkTo(hR, [-0.35, 0, kidsZ + 1.4], { speed: 1.0 }),
-      g.walkTo(wR, [0.45, 0, kidsZ + 1.4], { speed: 1.0 }),
-    ]);
-    await Promise.all([
-      g.walkTo(k1, [-1.15, 0, kidsZ + 1.3], { speed: 0.9 }),
-      g.walkTo(k2, [1.2, 0, kidsZ + 1.3], { speed: 0.9 }),
-    ]);
-    for (const c of [hR, wR, k1, k2]) { c.root.rotation.y = Math.PI; c.state = 'idle'; }
-    k1.lookYaw = -0.5; k2.lookYaw = 0.5;
-    wR.setExpression('smile'); hR.setExpression('smile');
-    g.camSet([0.4, 1.5, kidsZ + 5.2], [0, 1.0, kidsZ + 1.3]);
-    await g.wait(1.5);
-    k1.lookYaw = 0; k2.lookYaw = 0;
+    await g.wait(1.8);
+
+    // 8. over the children's shoulders, the two of them look at each other
+    wR.lookYaw = 1.0; hR.lookYaw = -0.9;
+    wR.setExpression('happycry'); hR.setExpression('happycry');
+    g.camera.fov = 34; g.camera.updateProjectionMatrix();
+    const we = eye(wR);
+    g.camSet([we.x - 0.9, we.y + 0.05, we.z - 0.9], [we.x, we.y, we.z]);
+    g.pushIn(0.25, 2.5).catch(() => {});
+    await g.wait(2.6);
+    const he = eye(hR);
+    g.camSet([he.x + 0.9, he.y + 0.05, he.z - 0.9], [he.x, he.y, he.z]);
+    g.pushIn(0.25, 2.5).catch(() => {});
+    hR.setExpression('smile');
+    await g.wait(2.4);
+
+    // 9. the whole family: a slow pull back, rain, the orchestra at its peak
+    const famMid = hR.root.position.clone().lerp(wR.root.position, 0.5).add(new THREE.Vector3(0, 0, -0.3));
+    g.handheld = 0;
+    g.camera.fov = 44; g.camera.updateProjectionMatrix();
+    await g.camOrbit(famMid, { r0: 2.2, r1: 4.2, h0: 1.0, h1: 2.4, a0: Math.PI + 0.6, a1: Math.PI - 0.5, look: 0.9, dur: 6 });
+
+    // 10. they get up and stand in a row, holding hands
+    for (const c of [hR, wR, k1, k2]) { c.lookYaw = 0; c.lookPitch = 0; c.setExpression('smile'); c.state = 'idle'; }
+    await g.fade(1, 0.8);
+    const rowZ = kidsZ + 1.4;
+    [[hR, -1.05], [k1, -0.38], [k2, 0.3], [wR, 1.0]].forEach(([c, x]) => { c.root.position.set(x, 0, rowZ); c.root.rotation.y = Math.PI; c.state = 'holdHands'; });
+    wR.setExpression('happycry');
+    g.camera.fov = 50; g.camera.updateProjectionMatrix();
+    g.camSet([0.4, 1.3, rowZ + 3.6], [0, 0.9, rowZ - 2]);
+    await g.fade(0, 0.8);
+    g.lockCam = false;
+    await g.wait(1.2);
     // one last action
     g.ui.prompt('W / ↑ — шаг вперёд');
     await g.until(() => input.pressed('up'));
     g.ui.prompt(null);
     audio.step('wet');
-    await g.walkTo(hR, [-0.35, 0, kidsZ + 0.7], { speed: 0.9 });
+    hR.state = 'walk';
+    await g.tween(0.7, (k) => { hR.root.position.z = rowZ - 0.6 * k; });
     // everyone walks together — final cutscene
     const walkers = [hR, wR, k1, k2];
     const walkOn = g.onUpdate((dt) => {
       for (const c of walkers) { c.root.position.z -= dt * 0.85; c.root.rotation.y = Math.PI; c.state = 'walk'; }
     });
-    const c0 = new THREE.Vector3(0.4, 1.5, kidsZ + 5.2);
+    const c0 = new THREE.Vector3(0.4, 1.3, rowZ + 3.6);
     let tc = 0;
     const crane = g.onUpdate((dt) => {
       tc += dt;

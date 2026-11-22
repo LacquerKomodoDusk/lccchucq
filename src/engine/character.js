@@ -20,8 +20,8 @@ function mix(c1, c2, k) {
  * 64x64 pixel-art face.
  * spec: { skin, skinDark, hair, brow, eye, lip, lash, beard, beardDark, noseRing, thickBrows, lashes, hairline, fringe }
  */
-export function faceTexture(spec, expr = 'neutral') {
-  return canvasTexture(64, 64, (g) => {
+function drawFace64(g, spec, expr) {
+  {
     const s = spec;
     const sk = s.skin, skD = s.skinDark, skL = mix(s.skin, '#ffffff', 0.12), skW = mix(s.skin, '#d0705a', 0.18);
     // base + soft shading: lighter forehead & nose bridge, warm cheeks, darker sides/jaw
@@ -38,7 +38,7 @@ export function faceTexture(spec, expr = 'neutral') {
     const closed = expr === 'closed';
     // brows
     const bw = s.thickBrows ? 3 : 2;
-    const sad = expr === 'sad' || expr === 'cry' || expr === 'fear';
+    const sad = expr === 'sad' || expr === 'cry' || expr === 'fear' || expr === 'happycry';
     const angry = expr === 'scary' || expr === 'angry';
     const browY = eyeY - (sad ? 8 : 6);
     for (let i = 0; i < 12; i++) {
@@ -54,7 +54,7 @@ export function faceTexture(spec, expr = 'neutral') {
     const lash = s.lash;
     const eye = (x) => {
       if (closed) { px(g, x, eyeY + 2, 10, 1, lash); px(g, x + 1, eyeY + 3, 8, 1, mix(sk, skD, 0.6)); return; }
-      const h = expr === 'fear' || expr === 'scary' ? 6 : expr === 'joy' || expr === 'smile' ? 3 : 4;
+      const h = expr === 'fear' || expr === 'scary' ? 6 : expr === 'joy' || expr === 'smile' || expr === 'happycry' ? 3 : 4;
       px(g, x, eyeY, 10, h, '#ece6dc');
       px(g, x + 3, eyeY, 4, h, s.eye);
       px(g, x + 4, eyeY + Math.max(0, h - 3), 2, Math.min(2, h), '#0c0a0a');
@@ -64,7 +64,10 @@ export function faceTexture(spec, expr = 'neutral') {
       if (s.lashes) { px(g, x - 2, eyeY - 2, 2, 1, lash); px(g, x + 10, eyeY - 2, 2, 1, lash); }
     };
     eye(14); eye(40);
-    if (expr === 'cry') { px(g, 17, eyeY + 5, 1, 10, '#a8cce6'); px(g, 45, eyeY + 5, 1, 12, '#a8cce6'); px(g, 18, eyeY + 14, 1, 2, '#c8e0f0'); }
+    if (expr === 'cry' || expr === 'happycry') {
+      px(g, 17, eyeY + 4, 1, 10, '#a8cce6'); px(g, 45, eyeY + 4, 1, 12, '#a8cce6'); px(g, 18, eyeY + 13, 1, 2, '#c8e0f0');
+      px(g, 14, eyeY + 4, 10, 1, '#c8dff0'); px(g, 40, eyeY + 4, 10, 1, '#c8dff0'); // wet lower lids
+    }
     // nose: bridge shadow, tip highlight, nostrils
     px(g, 29, eyeY + 1, 1, 12, mix(sk, skD, 0.6));
     px(g, 31, eyeY + 4, 2, 9, skL);
@@ -87,7 +90,7 @@ export function faceTexture(spec, expr = 'neutral') {
     // mouth
     const lip = s.lip, lipD = mix(s.lip, '#2a1010', 0.4), lipL = mix(s.lip, '#ffffff', 0.15);
     const my = 49;
-    if (expr === 'smile' || expr === 'joy') {
+    if (expr === 'smile' || expr === 'joy' || expr === 'happycry') {
       px(g, 24, my, 16, 2, lipD); px(g, 22, my - 1, 2, 1, lipD); px(g, 40, my - 1, 2, 1, lipD);
       px(g, 25, my + 2, 14, 2, lipL);
       if (expr === 'joy') px(g, 26, my, 12, 1, '#f0ece4');
@@ -103,7 +106,50 @@ export function faceTexture(spec, expr = 'neutral') {
     }
     // chin shadow
     if (!s.beard) px(g, 24, 58, 16, 2, mix(sk, skD, 0.5));
-  }, { key: `face64-${JSON.stringify(spec)}-${expr}` });
+  }
+}
+
+/**
+ * 128x128 face: the 64px pixel design is upscaled with soft interpolation,
+ * then painted over with skin shading (cheek warmth, nose & eye-socket shadows,
+ * forehead light, pores) — closer to the hand-painted artbook portraits.
+ */
+export function faceTexture(spec, expr = 'neutral') {
+  return canvasTexture(128, 128, (g) => {
+    const src = document.createElement('canvas'); src.width = src.height = 64;
+    const sg = src.getContext('2d'); sg.imageSmoothingEnabled = false;
+    drawFace64(sg, spec, expr);
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(src, 0, 0, 128, 128);
+    g.imageSmoothingEnabled = false;
+    // re-sharpen the eyes: pupils & highlights crisp again
+    g.drawImage(src, 10, 20, 44, 20, 20, 40, 88, 40);
+    const rad = (x, y, r, c0, c1) => { const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, c0); gr.addColorStop(1, c1); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); };
+    // forehead light, cheek warmth, socket and side shadows
+    rad(64, 26, 34, 'rgba(255,245,230,0.16)', 'rgba(255,245,230,0)');
+    if (!spec.beard) { rad(30, 80, 18, 'rgba(220,110,90,0.16)', 'rgba(220,110,90,0)'); rad(98, 80, 18, 'rgba(220,110,90,0.16)', 'rgba(220,110,90,0)'); }
+    rad(36, 56, 14, 'rgba(60,30,20,0.10)', 'rgba(60,30,20,0)'); rad(92, 56, 14, 'rgba(60,30,20,0.10)', 'rgba(60,30,20,0)');
+    rad(56, 82, 10, 'rgba(70,40,30,0.12)', 'rgba(70,40,30,0)'); // nose side shadow
+    const side = g.createLinearGradient(0, 0, 128, 0);
+    side.addColorStop(0, 'rgba(40,20,10,0.22)'); side.addColorStop(0.18, 'rgba(40,20,10,0)'); side.addColorStop(0.82, 'rgba(40,20,10,0)'); side.addColorStop(1, 'rgba(40,20,10,0.22)');
+    g.fillStyle = side; g.fillRect(0, 0, 128, 128);
+    // skin texture: faint pores / freckle noise
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+    for (let i = 0; i < 260; i++) { g.fillStyle = rnd() < 0.5 ? 'rgba(90,50,40,0.06)' : 'rgba(255,240,230,0.05)'; g.fillRect(Math.floor(rnd() * 128), Math.floor(rnd() * 128), 1, 1); }
+  }, { key: `face128-${JSON.stringify(spec)}-${expr}` });
+}
+
+/** side of the head: skin with a simple ear */
+export function earTex(skin, skinDark, hair) {
+  return canvasTexture(32, 32, (g) => {
+    px(g, 0, 0, 32, 32, skin);
+    px(g, 0, 0, 32, 7, hair); px(g, 0, 7, 6, 10, hair); px(g, 26, 7, 6, 10, hair);
+    px(g, 12, 11, 9, 13, mix(skin, skinDark, 0.5));
+    px(g, 13, 12, 7, 11, skin);
+    px(g, 15, 14, 3, 7, mix(skin, skinDark, 0.75));
+    px(g, 0, 26, 32, 6, mix(skin, skinDark, 0.4));
+  }, { key: `ear-${skin}-${hair}` });
 }
 
 /** clothing front: coat with lapels & buttons, jacket with zip, sweater, t-shirt */
@@ -186,8 +232,34 @@ function boxMesh(w, h, d, mat, { y = -h / 2, x = 0, z = 0 } = {}) {
   return new THREE.Mesh(geo, mat);
 }
 
+/** rounded limb (7-sided tapered cylinder) hanging down from its joint */
+function limbMesh(rTop, rBot, h, mat, { y = -h / 2, x = 0, z = 0, sz = 1 } = {}) {
+  const geo = new THREE.CylinderGeometry(rTop, rBot, h, 7, 2);
+  geo.scale(1, 1, sz);
+  geo.translate(x, y, z);
+  return new THREE.Mesh(geo, mat);
+}
+
+/** pull box corners inward so blocky parts read as rounded volumes */
+function roundCorners(geo, amount = 0.18) {
+  geo.computeBoundingBox();
+  const b = geo.boundingBox;
+  const cx = (b.max.x + b.min.x) / 2, cz = (b.max.z + b.min.z) / 2;
+  const hx = (b.max.x - b.min.x) / 2, hz = (b.max.z - b.min.z) / 2;
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const nx = (pos.getX(i) - cx) / hx, nz = (pos.getZ(i) - cz) / hz;
+    const corner = Math.abs(nx) * Math.abs(nz); // 1 at vertical edges
+    const k = 1 - amount * corner;
+    pos.setX(i, cx + (pos.getX(i) - cx) * k);
+    pos.setZ(i, cz + (pos.getZ(i) - cz) * k);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
 function taperBox(wTop, wBot, h, dTop, dBot, mat, yOff = 0) {
-  const geo = new THREE.BoxGeometry(1, h, 1);
+  const geo = new THREE.BoxGeometry(1, h, 1, 2, 2, 2);
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i);
@@ -196,7 +268,7 @@ function taperBox(wTop, wBot, h, dTop, dBot, mat, yOff = 0) {
     pos.setZ(i, pos.getZ(i) * (top ? dTop : dBot));
     pos.setY(i, y + yOff);
   }
-  geo.computeVertexNormals();
+  roundCorners(geo, 0.22);
   return new THREE.Mesh(geo, mat);
 }
 
@@ -295,6 +367,25 @@ function poseFor(state, t, ch) {
       p.sitDrop = 0.45; p.thighLX = 1.5; p.thighRX = 1.5; p.shinLX = 1.5; p.shinRX = 1.5;
       p.torsoX = 0.34; p.headX = 0.1; p.headZ = 0.2 * (ch.kissSide ?? 1);
       p.uArmLX = -0.7; p.uArmRX = -0.5; p.uArmLZ = -0.2; p.uArmRZ = 0.2; p.fArmLX = -0.7; p.fArmRX = -0.6;
+      break;
+    case 'kneelOpen':
+    case 'kneelHug': {
+      const hugging = state === 'kneelHug';
+      p.sitDrop = 0.42; p.thighLX = 1.4; p.shinLX = 1.4; p.thighRX = -0.1; p.shinRX = 1.6;
+      p.torsoX = hugging ? 0.12 : 0.05; p.headX = hugging ? 0.15 : -0.05; p.headZ = hugging ? 0.15 : 0;
+      p.uArmLX = hugging ? -1.2 : -0.9; p.uArmRX = hugging ? -1.2 : -0.9;
+      p.uArmLZ = hugging ? -0.5 : 0.55; p.uArmRZ = hugging ? 0.5 : -0.55;
+      p.fArmLX = hugging ? -1.0 : -0.4; p.fArmRX = hugging ? -1.0 : -0.4;
+      p.uArmLY = hugging ? 0.4 : 0; p.uArmRY = hugging ? -0.4 : 0;
+      p.torsoZ = hugging ? Math.sin(t * 0.9) * 0.03 : 0; // gentle rocking
+      break;
+    }
+    case 'holdHands':
+      p.torsoX = br; p.uArmLZ = 0.32; p.uArmRZ = -0.32; p.uArmLX = -0.18; p.uArmRX = -0.18; p.fArmLX = -0.15; p.fArmRX = -0.15;
+      break;
+    case 'reach':
+      p.sitDrop = 0.45; p.thighLX = 1.5; p.thighRX = 1.5; p.shinLX = 1.5; p.shinRX = 1.5;
+      p.torsoX = 0.2; p.headX = 0.25; p.uArmLX = -1.15; p.uArmRX = -1.15; p.fArmLX = -0.3; p.fArmRX = -0.3; p.uArmLZ = -0.1; p.uArmRZ = 0.1;
       break;
     case 'argue': {
       // raised voice: leaning in, sharp hand gestures
@@ -411,14 +502,25 @@ export class Character {
     };
     this.faceMat = this.mat({ map: faceTexture(this.faceSpec, 'neutral') });
     const hw = 0.21 * k, hh = 0.25 * k, hd = 0.23 * k;
-    const headGeo = new THREE.BoxGeometry(hw, hh, hd);
+    const headGeo = new THREE.BoxGeometry(hw, hh, hd, 3, 3, 3);
+    {
+      const hpos = headGeo.attributes.position;
+      const ax = hw / 2, ay = hh / 2, az = hd / 2;
+      for (let i = 0; i < hpos.count; i++) {
+        const x = hpos.getX(i), y = hpos.getY(i), z = hpos.getZ(i);
+        const l = Math.hypot(x / ax, y / ay, z / az) || 1;
+        const front = z > az * 0.99 ? 0.25 : 0.42; // keep the face plane flatter
+        hpos.setXYZ(i, x + (x / l - x) * front, y + (y / l - y) * front, z + (z / l - z) * front);
+      }
+    }
     headGeo.translate(0, hh / 2, 0);
     // slightly narrow the chin
     const hp = headGeo.attributes.position;
     for (let i = 0; i < hp.count; i++) if (hp.getY(i) < 0.01) { hp.setX(i, hp.getX(i) * 0.78); hp.setZ(i, hp.getZ(i) * 0.86); }
     headGeo.computeVertexNormals();
     const headSkin = this.mat({ color: s.skin });
-    this.headMesh = new THREE.Mesh(headGeo, [headSkin, headSkin, hairM, headSkin, this.faceMat, hairM]);
+    const earM = this.mat({ map: earTex(s.skin, s.skinDark, s.hair) });
+    this.headMesh = new THREE.Mesh(headGeo, [earM, earM, hairM, headSkin, this.faceMat, hairM]);
     this.head.add(this.headMesh);
     // nose
     const nose = taperBox(0.025 * k, 0.04 * k, 0.07 * k, 0.01, 0.045 * k, skin);
@@ -468,9 +570,9 @@ export class Character {
     const ua = 0.3 * k, fa = 0.28 * k;
     const mkArm = (side) => {
       const sh = new THREE.Group(); sh.position.set(side * (tw / 2 + 0.03 * k), 0.54 * k, 0); this.torso.add(sh);
-      sh.add(boxMesh(0.09 * k, ua, 0.1 * k, armMat, { y: -ua / 2 }));
+      sh.add(limbMesh(0.052 * k, 0.045 * k, ua, armMat, { y: -ua / 2 }));
       const el = new THREE.Group(); el.position.y = -ua; sh.add(el);
-      el.add(boxMesh(0.08 * k, fa, 0.09 * k, armMat, { y: -fa / 2 }));
+      el.add(limbMesh(0.044 * k, 0.036 * k, fa, armMat, { y: -fa / 2 }));
       const hand = boxMesh(0.07 * k, 0.09 * k, 0.05 * k, handM, { y: -fa - 0.04 * k });
       el.add(hand);
       return { sh, el, hand };
@@ -481,11 +583,14 @@ export class Character {
     const th = 0.46 * k, sl = 0.44 * k;
     const mkLeg = (side) => {
       const hip = new THREE.Group(); hip.position.set(side * 0.09 * k, -0.02, 0); this.hips.add(hip);
-      hip.add(boxMesh(0.13 * k, th, 0.14 * k, pants, { y: -th / 2 }));
+      hip.add(limbMesh(0.072 * k, 0.056 * k, th, pants, { y: -th / 2 }));
       const knee = new THREE.Group(); knee.position.y = -th; hip.add(knee);
-      knee.add(boxMesh(0.11 * k, sl, 0.12 * k, pants, { y: -sl / 2 }));
-      knee.add(boxMesh(0.11 * k, 0.07 * k, 0.22 * k, shoes, { y: -sl + 0.035 * k, z: 0.04 * k }));
-      return { hip, knee };
+      knee.add(limbMesh(0.054 * k, 0.044 * k, sl, pants, { y: -sl / 2 }));
+      const ankle = new THREE.Group(); ankle.position.y = -sl + 0.07 * k; knee.add(ankle);
+      const shoeGeo = roundCorners(new THREE.BoxGeometry(0.1 * k, 0.07 * k, 0.23 * k, 1, 1, 2), 0.3);
+      shoeGeo.translate(0, -0.035 * k, 0.045 * k);
+      ankle.add(new THREE.Mesh(shoeGeo, shoes));
+      return { hip, knee, ankle };
     };
     this.legL = mkLeg(1); this.legR = mkLeg(-1);
 
@@ -538,7 +643,9 @@ export class Character {
         this.head.add(cap);
       }
       const len = (s.hairLength ?? 0.55) * k;
-      this.head.add(boxMesh(hw * 1.2, len, 0.06 * k, hairM, { y: hh - len / 2 + 0.03, z: -hd / 2 - 0.02 }));
+      // the long back of the hair hangs from a pivot so it can sway
+      this.hairPivot = new THREE.Group(); this.hairPivot.position.set(0, hh + 0.03, -hd / 2 - 0.02); this.head.add(this.hairPivot);
+      this.hairPivot.add(boxMesh(hw * 1.2, len, 0.06 * k, hairM, { y: -len / 2 }));
       const sideTop = s.hat ? hh * 0.74 : hh;
       this.head.add(boxMesh(0.04, len * 0.8, hd * 0.55, hairM, { x: hw / 2 + 0.015, y: sideTop - len * 0.4 + 0.02, z: -0.04 }));
       this.head.add(boxMesh(0.04, len * 0.8, hd * 0.55, hairM, { x: -hw / 2 - 0.015, y: sideTop - len * 0.4 + 0.02, z: -0.04 }));
@@ -636,6 +743,28 @@ export class Character {
     this.armL.el.rotation.x = p.fArmLX; this.armR.el.rotation.x = p.fArmRX;
     this.legL.hip.rotation.x = -p.thighLX; this.legR.hip.rotation.x = -p.thighRX;
     this.legL.knee.rotation.x = p.shinLX; this.legR.knee.rotation.x = p.shinRX;
+    // feet: stay level with the ground, heel strike / toe push-off while walking
+    if (this.legL.ankle) {
+      const walking = this.state === 'walk' || this.state === 'run' || this.state === 'scary';
+      for (const [leg, th] of [[this.legL, p.thighLX], [this.legR, p.thighRX]]) {
+        if (p.sitDrop > 0.2) { leg.ankle.rotation.x = lerp(leg.ankle.rotation.x, 0, Math.min(1, dt * 10)); continue; }
+        let a = -(leg.hip.rotation.x + leg.knee.rotation.x);
+        if (walking) a += -Math.max(0, th) * 0.45 + Math.max(0, -th) * 0.55;
+        leg.ankle.rotation.x = a;
+      }
+    }
+    // breathing
+    const breath = Math.sin(this.t * (this.state === 'run' ? 4.5 : this.state === 'fear' || this.state === 'anxious' ? 3.2 : 1.6));
+    this.torso.scale.set(1 + breath * 0.006, 1 + breath * 0.01, 1 + breath * 0.012);
+    // long hair: a damped spring driven by speed, turning and head motion
+    if (this.hairPivot) {
+      const hs = this.hairSpring || (this.hairSpring = { a: 0, v: 0, z: 0, vz: 0 });
+      const targetX = Math.min(0.5, speed * 0.1) + Math.max(0, p.torsoX) * 0.6 + Math.max(0, p.headX) * 0.8;
+      const targetZ = this.turnLean * 2.2;
+      hs.v += (targetX - hs.a) * 60 * dt; hs.v *= Math.exp(-7 * dt); hs.a += hs.v * dt;
+      hs.vz += (targetZ - hs.z) * 50 * dt; hs.vz *= Math.exp(-6 * dt); hs.z += hs.vz * dt;
+      this.hairPivot.rotation.set(Math.max(-0.05, hs.a + Math.sin(this.t * 7) * Math.min(0.03, speed * 0.008)), 0, hs.z);
+    }
     if (this.carryMesh) {
       // carrying something in both arms: arms forward regardless of walking
       this.armL.sh.rotation.set(-0.85, 0, -0.28); this.armR.sh.rotation.set(-0.85, 0, 0.28);

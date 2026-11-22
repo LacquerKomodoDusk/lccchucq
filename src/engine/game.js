@@ -102,9 +102,8 @@ export class Game {
 
   /** Create a fresh scene. opts: bg, fog [color, near, far], ambient, hemi [sky, ground, int], sun [color, int, dir] */
   newScene(opts = {}) {
-    this.scene.traverse((o) => {
-      if (o.geometry) o.geometry.dispose();
-    });
+    if (!this._keepScene) this.scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+    this._keepScene = false;
     this.scene = new THREE.Scene();
     this.resetSceneState();
     const bg = new THREE.Color(opts.bg ?? 0x101114);
@@ -133,6 +132,41 @@ export class Game {
   }
 
   add(obj) { this.scene.add(obj); return obj; }
+
+  /** Keep the current scene aside (e.g. the arena) while a flashback plays. */
+  pushScene() {
+    const p = this.r.post;
+    this._stack = this._stack || [];
+    this._stack.push({
+      scene: this.scene, colliders: this.colliders, interactables: this.interactables, triggers: this.triggers,
+      updaters: this.updaters, chars: this.chars, player: this.player, playerState: this.playerState,
+      controlEnabled: this.controlEnabled, camMode: this.camMode, camFollow: { ...this.camFollow }, bounds: this.bounds,
+      surface: this.surface, camYaw: this.camYaw, camPitch: this.camPitch, fov: this.camera.fov,
+      camPos: this.camera.position.clone(), camLook: this.camLook ? this.camLook.clone() : null,
+      hemi: this.hemi, sun: this.sun, fill: this.fill, warp: globalUniforms.uWarp.value,
+      post: { d: p.uDistort.value, sat: p.uSat.value, tint: p.uTint.value.clone(), noise: p.uNoise.value },
+    });
+    this._keepScene = true;
+  }
+  popScene() {
+    const st = this._stack.pop();
+    this.scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+    Object.assign(this, {
+      scene: st.scene, colliders: st.colliders, interactables: st.interactables, triggers: st.triggers, updaters: st.updaters,
+      chars: st.chars, player: st.player, playerState: st.playerState, controlEnabled: st.controlEnabled, camMode: st.camMode,
+      bounds: st.bounds, surface: st.surface, camYaw: st.camYaw, camPitch: st.camPitch, camLook: st.camLook,
+      hemi: st.hemi, sun: st.sun, fill: st.fill,
+    });
+    this.camFollow = st.camFollow;
+    this.camera.fov = st.fov; this.camera.updateProjectionMatrix();
+    this.camera.position.copy(st.camPos);
+    if (st.camLook) this.camera.lookAt(st.camLook);
+    globalUniforms.uWarp.value = st.warp;
+    const p = this.r.post;
+    p.uDistort.value = st.post.d; p.uSat.value = st.post.sat; p.uTint.value.copy(st.post.tint); p.uNoise.value = st.post.noise;
+    this.letterbox(false);
+    this._occ = null;
+  }
   onUpdate(fn) { this.updaters.add(fn); return () => this.updaters.delete(fn); }
 
   /** axis aligned box collider on XZ */
@@ -166,7 +200,11 @@ export class Game {
     this.chars.push(c);
     return c;
   }
-  addActor(obj) { obj._last = obj.root.position.clone(); obj.speed = 0; this.chars.push(obj); return obj; }
+  addActor(obj) {
+    obj._last = obj.root.position.clone(); obj.speed = 0; this.chars.push(obj);
+    obj.root.traverse((o) => { o.userData.character = true; });
+    return obj;
+  }
 
   setPlayer(c, { control = true } = {}) {
     this.player = c;
@@ -232,6 +270,47 @@ export class Game {
     this.camera.position.set(...pos);
     this.camLook = new THREE.Vector3(...look);
     this.camera.lookAt(this.camLook);
+  }
+
+  /* ---------------- camera never goes through geometry ---------------- */
+
+  buildOccluders() {
+    const list = [];
+    const v = new THREE.Vector3();
+    this.scene.traverse((o) => {
+      if (!o.isMesh || !o.visible || o.userData.character || o.userData.noOcclude) return;
+      let p = o.parent, hidden = false;
+      while (p) { if (!p.visible || p.userData.character) { hidden = true; break; } p = p.parent; }
+      if (hidden) return;
+      const m = Array.isArray(o.material) ? o.material[0] : o.material;
+      if (!m || (m.transparent && m.opacity < 0.9) || m.blending === THREE.AdditiveBlending) return;
+      if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+      o.getWorldScale(v);
+      if (o.geometry.boundingSphere.radius * Math.max(v.x, v.y, v.z) < 0.22) return; // small props don't push the camera
+      list.push(o);
+    });
+    this._occ = list;
+  }
+
+  /** pull the camera in front of anything between it and what it looks at */
+  avoidOcclusion() {
+    const look = this.camLook;
+    if (!look || this.noOcclusion) return;
+    this._occFrame = (this._occFrame ?? 0) + 1;
+    if (!this._occ || this._occScene !== this.scene || this._occFrame % 45 === 0) { this.buildOccluders(); this._occScene = this.scene; }
+    const cam = this.camera.position;
+    const dir = cam.clone().sub(look);
+    const dist = dir.length();
+    if (dist < 0.35) return;
+    dir.divideScalar(dist);
+    if (!this._ray) this._ray = new THREE.Raycaster();
+    this._ray.set(look, dir);
+    this._ray.near = 0.05; this._ray.far = dist;
+    const hits = this._ray.intersectObjects(this._occ, false);
+    if (hits.length) {
+      const d = Math.max(0.3, hits[0].distance - 0.2);
+      cam.copy(look).addScaledVector(dir, d);
+    }
   }
 
   updateCamera(dt, snap = false) {
@@ -494,11 +573,26 @@ export class Game {
     // never put the camera inside a wall: fall back to another framing
     for (let i = 0; i < shots.length && this.pointBlocked(shot.pos.x, shot.pos.z, 0.1); i++) shot = shots[(order[n % order.length] + i + 1) % shots.length];
     if (this.pointBlocked(shot.pos.x, shot.pos.z, 0.1)) return false;
+    // standing characters turn to each other when they talk
+    if (near) {
+      for (const [a, b] of [[S, L], [L, S]]) {
+        if (a.state !== 'idle' && a.state !== 'walk') continue;
+        const want = Math.atan2(b.root.position.x - a.root.position.x, b.root.position.z - a.root.position.z);
+        const from = a.root.rotation.y;
+        this.tween(0.35, (k) => { a.root.rotation.y = lerpAngle(from, want, k); }).catch(() => {});
+      }
+    }
+    // don't put the lens inside somebody's head
+    const headHit = (pos) => this.chars.some((c) => c.eyePos && c.root.visible && c.eyePos().distanceTo(pos) < 0.32);
+    if (headHit(shot.pos)) { const alt = shots.find((sh) => !headHit(sh.pos) && !this.pointBlocked(sh.pos.x, sh.pos.z, 0.1)); if (alt) shot = alt; }
     this.camMode = 'script';
     this.camera.fov = shot.fov; this.camera.updateProjectionMatrix();
     this.camera.position.copy(shot.pos);
     this.camLook = shot.look.clone();
     this.camera.lookAt(this.camLook);
+    this.avoidOcclusion();
+    this.camera.lookAt(this.camLook);
+    shot = { ...shot, pos: this.camera.position.clone() };
     this.handheld = Math.max(this.handheld ?? 0, 0.25);
     dc.usedHand = true;
     dc.shotPos = shot.pos.clone();
@@ -571,6 +665,7 @@ export class Game {
       if (pl && pl.stepped && (pl.state === 'walk' || pl.state === 'run') && pl.speed > 0.3) audio.step(this.surface, pl.state === 'run');
       for (const c of this.chars) c.stepped = false;
       this.updateCamera(dt);
+      this.avoidOcclusion();
       this.ui.update(dt);
     }
     this.actConsumed = false;

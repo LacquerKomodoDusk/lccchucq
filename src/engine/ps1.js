@@ -180,7 +180,7 @@ export class PS1Renderer {
     this.gl = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
     this.gl.setPixelRatio(1);
     this.gl.outputColorSpace = THREE.SRGBColorSpace;
-    this.lowH = 360;
+    this.lowH = 480;
     this.target = new THREE.WebGLRenderTarget(320, 240, {
       minFilter: THREE.NearestFilter,
       magFilter: THREE.NearestFilter,
