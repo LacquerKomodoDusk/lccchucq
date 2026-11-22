@@ -232,6 +232,60 @@ function boxMesh(w, h, d, mat, { y = -h / 2, x = 0, z = 0 } = {}) {
   return new THREE.Mesh(geo, mat);
 }
 
+/**
+ * Sculpted low-poly head (faceted, like the concept sheet): a sphere pushed
+ * into a skull with brow ridge, eye sockets, cheekbones, a narrowing jaw and a
+ * chin. Front triangles get a planar UV for the face texture (group 0), the
+ * rest uses the side/back material (group 1). Bottom of the head at y = 0.
+ */
+function sculptedHead(hw, hh, hd, { female = false, kid = false } = {}) {
+  const geo = new THREE.SphereGeometry(1, 12, 10);
+  const pos = geo.attributes.position;
+  const uv = geo.attributes.uv;
+  const ax = hw / 2, ay = hh / 2, az = hd / 2;
+  for (let i = 0; i < pos.count; i++) {
+    const nx = pos.getX(i), ny = pos.getY(i), nz = pos.getZ(i);
+    let x = nx * ax, y = ny * ay, z = nz * az;
+    const front = Math.max(0, nz);
+    // flatter face plane and flatter sides
+    z = nz > 0 ? z * (0.82 + 0.18 * (1 - front)) + az * 0.14 * front : z;
+    x *= 0.96;
+    // jaw: narrows toward the chin, the back of the lower head becomes the neck
+    if (ny < -0.15) {
+      const t = (-ny - 0.15) / 0.85;
+      const taper = kid ? 0.25 : female ? 0.48 : 0.4;
+      x *= 1 - t * taper;
+      if (nz < 0) z *= 1 - t * 0.45;
+      else z += az * 0.05 * t; // chin forward
+    }
+    // cranium slightly fuller at the back/top
+    if (ny > 0.3 && nz < 0.2) { z -= az * 0.06 * (ny - 0.3); }
+    if (kid && ny > 0) { x *= 1.04; z *= 1.02; }
+    // brow ridge
+    if (nz > 0.45 && ny > 0.22 && ny < 0.45 && Math.abs(nx) < 0.6) z += az * (female || kid ? 0.03 : 0.07);
+    // eye sockets
+    if (nz > 0.45 && ny > 0.02 && ny < 0.22 && Math.abs(nx) > 0.12 && Math.abs(nx) < 0.55) z -= az * 0.06;
+    // cheekbones
+    if (nz > 0.15 && ny > -0.3 && ny < 0.05 && Math.abs(nx) > 0.45) x *= female ? 1.05 : 1.07;
+    pos.setXYZ(i, x, y + ay, z);
+    // planar UV from the front (the face texture covers the head's width & height)
+    uv.setXY(i, 0.5 + x / (hw * 1.02), (y + ay) / hh);
+  }
+  // split front/back triangles into two material groups
+  const idx = geo.index.array;
+  const frontTris = [], backTris = [];
+  for (let t = 0; t < idx.length; t += 3) {
+    const zc = (pos.getZ(idx[t]) + pos.getZ(idx[t + 1]) + pos.getZ(idx[t + 2])) / 3;
+    (zc > az * 0.05 ? frontTris : backTris).push(idx[t], idx[t + 1], idx[t + 2]);
+  }
+  geo.setIndex([...frontTris, ...backTris]);
+  geo.clearGroups();
+  geo.addGroup(0, frontTris.length, 0);
+  geo.addGroup(frontTris.length, backTris.length, 1);
+  geo.computeVertexNormals();
+  return geo;
+}
+
 /** rounded limb (7-sided tapered cylinder) hanging down from its joint */
 function limbMesh(rTop, rBot, h, mat, { y = -h / 2, x = 0, z = 0, sz = 1 } = {}) {
   const geo = new THREE.CylinderGeometry(rTop, rBot, h, 7, 2);
@@ -250,7 +304,7 @@ function roundCorners(geo, amount = 0.18) {
   for (let i = 0; i < pos.count; i++) {
     const nx = (pos.getX(i) - cx) / hx, nz = (pos.getZ(i) - cz) / hz;
     const corner = Math.abs(nx) * Math.abs(nz); // 1 at vertical edges
-    const k = 1 - amount * corner;
+    const k = 1 - amount * corner * corner * corner;
     pos.setX(i, cx + (pos.getX(i) - cx) * k);
     pos.setZ(i, cz + (pos.getZ(i) - cz) * k);
   }
@@ -259,7 +313,7 @@ function roundCorners(geo, amount = 0.18) {
 }
 
 function taperBox(wTop, wBot, h, dTop, dBot, mat, yOff = 0) {
-  const geo = new THREE.BoxGeometry(1, h, 1, 2, 2, 2);
+  const geo = new THREE.BoxGeometry(1, h, 1, 4, 2, 4);
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i);
@@ -443,7 +497,7 @@ export class Character {
     this.build();
   }
 
-  mat(opts) { const m = ps1Material(opts); this.materials.push(m); return m; }
+  mat(opts) { const m = ps1Material({ flat: true, ...opts }); this.materials.push(m); return m; }
 
   build() {
     const s = this.spec;
@@ -469,7 +523,7 @@ export class Character {
     const tw = (s.shoulders ?? 0.4) * k;
     const frontKind = coatM ? (s.longCoat ? 'coat' : 'jacket') : (s.topKind || 'sweater');
     const frontM = this.mat({ map: clothFrontTex(coatM ? s.coat : s.top, frontKind, s.buttons || '#2a2622') });
-    const torsoMesh = taperBox(tw, 0.32 * k, 0.56 * k, 0.22 * k, 0.2 * k, [torsoMat, torsoMat, torsoMat, torsoMat, frontM, torsoMat], 0.28 * k + 0.04 * k);
+    const torsoMesh = taperBox(tw, tw * 0.86, 0.56 * k, 0.22 * k, 0.2 * k, [torsoMat, torsoMat, torsoMat, torsoMat, frontM, torsoMat], 0.28 * k + 0.04 * k);
     this.torso.add(torsoMesh);
     if (coatM) {
       // collar / inner top visible in front
@@ -488,12 +542,18 @@ export class Character {
 
     // neck + head
     this.neck = new THREE.Group(); this.neck.position.y = 0.6 * k; this.torso.add(this.neck);
-    this.neck.add(boxMesh(0.09 * k, 0.08 * k, 0.09 * k, skin, { y: 0.04 * k }));
+    this.neck.add(limbMesh(0.05 * k, 0.056 * k, 0.09 * k, skin, { y: 0.03 * k }));
+    if (coatM) {
+      // turned-up coat collar around the neck
+      const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.085 * k, 0.11 * k, 0.09 * k, 8, 1, true, Math.PI * 0.35, Math.PI * 1.3), this.mat({ map: fabricTex(s.coat, [2, 1], 6), side: THREE.DoubleSide }));
+      collar.position.y = 0.0;
+      this.neck.add(collar);
+    }
     if (s.scarf) {
       const sc = this.mat({ map: knitTex(s.scarf) });
       this.neck.add(boxMesh(0.2 * k, 0.07 * k, 0.18 * k, sc, { y: 0.02 * k }));
     }
-    this.head = new THREE.Group(); this.head.position.y = 0.08 * k; this.neck.add(this.head);
+    this.head = new THREE.Group(); this.head.position.y = 0.055 * k; this.neck.add(this.head);
     this.head.scale.setScalar(s.headScale ?? 1);
     this.faceSpec = {
       skin: s.skin, skinDark: s.skinDark, hair: s.hair, brow: s.brow, eye: s.eye, lip: s.lip, lash: s.lash ?? '#2a1d18',
@@ -502,29 +562,18 @@ export class Character {
     };
     this.faceMat = this.mat({ map: faceTexture(this.faceSpec, 'neutral') });
     const hw = 0.21 * k, hh = 0.25 * k, hd = 0.23 * k;
-    const headGeo = new THREE.BoxGeometry(hw, hh, hd, 3, 3, 3);
-    {
-      const hpos = headGeo.attributes.position;
-      const ax = hw / 2, ay = hh / 2, az = hd / 2;
-      for (let i = 0; i < hpos.count; i++) {
-        const x = hpos.getX(i), y = hpos.getY(i), z = hpos.getZ(i);
-        const l = Math.hypot(x / ax, y / ay, z / az) || 1;
-        const front = z > az * 0.99 ? 0.25 : 0.42; // keep the face plane flatter
-        hpos.setXYZ(i, x + (x / l - x) * front, y + (y / l - y) * front, z + (z / l - z) * front);
-      }
-    }
-    headGeo.translate(0, hh / 2, 0);
-    // slightly narrow the chin
-    const hp = headGeo.attributes.position;
-    for (let i = 0; i < hp.count; i++) if (hp.getY(i) < 0.01) { hp.setX(i, hp.getX(i) * 0.78); hp.setZ(i, hp.getZ(i) * 0.86); }
-    headGeo.computeVertexNormals();
+    const female = s.name === 'wife';
+    const kid = (s.headScale ?? 1) > 1.1;
+    const headGeo = sculptedHead(hw, hh, hd, { female, kid });
     const headSkin = this.mat({ color: s.skin });
-    const earM = this.mat({ map: earTex(s.skin, s.skinDark, s.hair) });
-    this.headMesh = new THREE.Mesh(headGeo, [earM, earM, hairM, headSkin, this.faceMat, hairM]);
+    this.headMesh = new THREE.Mesh(headGeo, [this.faceMat, headSkin]);
     this.head.add(this.headMesh);
     // nose
-    const nose = taperBox(0.025 * k, 0.04 * k, 0.07 * k, 0.01, 0.045 * k, skin);
-    nose.position.set(0, hh * 0.47, hd / 2 + 0.012);
+    const noseGeo = new THREE.ConeGeometry(0.022 * k, 0.07 * k, 4, 1);
+    noseGeo.rotateY(Math.PI / 4); noseGeo.scale(1, 1, 0.9);
+    const nose = new THREE.Mesh(noseGeo, skin);
+    nose.position.set(0, hh * 0.47, hd / 2 + 0.006 * k);
+    nose.rotation.x = -0.32;
     this.head.add(nose);
     if (s.noseRing) {
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.008 * k, 0.0022, 3, 6), this.mat({ color: 0xe6dcb5, emissive: 0x332a10 }));
@@ -536,14 +585,29 @@ export class Character {
     }
     this.buildHair(hairM, hw, hh, hd, k);
     if (s.beard) {
-      const bm = this.mat({ map: hairTex(s.beard, [1, 1], 9) });
-      const beard = taperBox(hw * 0.95, hw * 0.55, 0.12 * k, hd * 0.5, hd * 0.35, bm, 0);
-      beard.position.set(0, 0.0, hd * 0.22);
+      // a faceted beard shell hugging the jaw and cheeks; the mouth stays open
+      const bm = this.mat({ map: hairTex(s.beard, [2, 2], 9) });
+      const shell = sculptedHead(hw * 1.1, hh * 1.04, hd * 1.12, { female: false });
+      const sp = shell.attributes.position, si = shell.index.array;
+      const keep = [];
+      for (let t = 0; t < si.length; t += 3) {
+        let cx = 0, cy = 0, cz = 0;
+        for (let j = 0; j < 3; j++) { cx += sp.getX(si[t + j]); cy += sp.getY(si[t + j]); cz += sp.getZ(si[t + j]); }
+        cx /= 3; cy /= 3; cz /= 3;
+        const lowFront = cy < hh * 0.42 && cz > -hd * 0.15;
+        const sideburn = cy < hh * 0.62 && Math.abs(cx) > hw * 0.38 && cz > -hd * 0.2 && cz < hd * 0.3;
+        const mouth = Math.abs(cx) < hw * 0.17 && cy > hh * 0.19 && cy < hh * 0.33 && cz > hd * 0.3;
+        if ((lowFront || sideburn) && !mouth) keep.push(si[t], si[t + 1], si[t + 2]);
+      }
+      shell.setIndex(keep); shell.clearGroups();
+      shell.translate(0, -hh * 0.03, 0);
+      const beard = new THREE.Mesh(shell, bm);
       this.head.add(beard);
-      const cheeks = boxMesh(hw * 1.04, 0.1 * k, hd * 0.7, bm, { y: hh * 0.26, z: 0.01 });
-      this.head.add(cheeks);
-      // moustache
-      this.head.add(boxMesh(hw * 0.5, 0.025 * k, 0.03, bm, { y: hh * 0.3, z: hd / 2 + 0.006 }));
+      // moustache: a small faceted wedge above the lip
+      const mGeo = new THREE.CylinderGeometry(0.012 * k, 0.018 * k, hw * 0.5, 5, 1); mGeo.rotateZ(Math.PI / 2);
+      const moustache = new THREE.Mesh(mGeo, bm);
+      moustache.position.set(0, hh * 0.34, hd * 0.55);
+      this.head.add(moustache);
     }
     if (s.hat) {
       // slouchy knitted beanie
