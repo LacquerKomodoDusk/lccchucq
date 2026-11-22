@@ -225,7 +225,7 @@ def compute_uvs(part):
         fc = [sum(p[i] for p in pts) / len(pts) for i in range(3)]
         if part.mode == 'face':
             # front third of the head -> planar projection onto the whole FACE island
-            if fc[1] < ctr[1] - ext[1] * 0.18 and abs(fc[0] - ctr[0]) < ext[0] * 0.42:
+            if fc[1] < ctr[1] - ext[1] * getattr(part, 'face_depth', 0.18) and abs(fc[0] - ctr[0]) < ext[0] * getattr(part, 'face_width', 0.42):
                 rx, ry, rw, rh = part.rect
                 uvs = []
                 for p in pts:

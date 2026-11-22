@@ -58,3 +58,29 @@ node tools/characters/previews.cjs hero assets/characters/hero http://localhost:
   как в PS1, без искажений при движении.
 - **Анимации:** idle, walk, run, turn, look, sit, interact, hug, sleep,
   first_meeting_head_turn, stolen_glance, family_walk.
+
+# Головы (Face production spec v1.0)
+
+```bash
+.blenv/bin/python tools/characters/face_expressions.py <лист_лиц.webp> src/assets/heads   # лица + 6 эмоций
+.blenv/bin/python tools/characters/build_head.py hero
+node tools/characters/head_previews.cjs hero assets/heads/hero http://localhost:4173
+```
+
+Файлы в `assets/heads/<персонаж>/`: `head.glb`, `head.blend`, `face_atlas.png`
+(+ `face_atlas_<эмоция>.png`), `face_uv.png`, `front.png`, `side.png`,
+`three_quarter.png`, а также `expressions.png`, `head_turn_bus.png`, `views.png`.
+Просмотрщик: `/heads.html` (ракурсы, каркас, скелет, эмоции, анимации).
+
+Герой:
+- Голова 416 треугольников без волос и бороды (голова, нос, уши, шея), всего 746.
+  Волосы, борода и уши — отдельная геометрия.
+- Лицо — приоритетный UV-остров 128×128 в атласе 256×256, остальные острова
+  развёрнуты по швам сзади и упакованы без пересечений.
+- Нейтральное лицо — фронтальная текстура 128×128 с листа лиц. Ракурсы эмоций
+  на листе — 3/4, поэтому как текстуру их не наложить: эмоции (удивление,
+  тревога, усталость, грусть, радость) — сменные элементы (брови, веки, рот),
+  перерисованные в той же пиксельной сетке и палитре.
+- Кости `neck` и `head` совпадают по именам и положению со скелетом тела.
+- Анимации: idle, head_turn_bus (резкий поворот в автобусе), stolen_glance,
+  look_around, nod.
