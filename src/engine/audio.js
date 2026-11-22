@@ -392,12 +392,35 @@ export class AudioEngine {
     this.out(g, dest, wet);
   }
 
+  // soft, natural footsteps: a low heel thud + a quiet surface texture
   step(surface = 'hard', run = false) {
-    const v = run ? 0.22 : 0.14;
-    if (surface === 'grass') this.noise({ dur: 0.12, f: 2500, q: 0.6, vel: v * 0.6, type: 'highpass' });
-    else if (surface === 'wet') { this.noise({ dur: 0.14, f: 1800, q: 1.2, vel: v }); this.noise({ dur: 0.08, f: 5000, q: 2, vel: v * 0.4 }); }
-    else if (surface === 'metal') { this.noise({ dur: 0.1, f: 900, q: 3, vel: v }); this.tone({ f: 180, dur: 0.08, type: 'triangle', vel: v * 0.2 }); }
-    else this.noise({ dur: 0.08, f: 600 + Math.random() * 300, q: 1.5, vel: v });
+    if (!this.ctx) return;
+    const t = this.now;
+    const v = (run ? 1.3 : 1) * (0.85 + Math.random() * 0.3);
+    const r = () => 0.88 + Math.random() * 0.24;
+    const heel = (f, vel, dur = 0.08) => this.noise({ t, dur, type: 'lowpass', f: f * r(), q: 0.7, vel: vel * v, attack: 0.004, wet: 0.04 });
+    switch (surface) {
+      case 'grass':
+        heel(200, 0.09);
+        this.noise({ t: t + 0.01, dur: 0.16, type: 'bandpass', f: 2800 * r(), q: 0.8, vel: 0.022 * v, attack: 0.03, wet: 0.02 });
+        break;
+      case 'snow':
+        heel(260, 0.07, 0.07);
+        for (let i = 0; i < 5; i++) this.noise({ t: t + 0.01 + i * (0.012 + Math.random() * 0.012), dur: 0.03, type: 'bandpass', f: 2400 + Math.random() * 2400, q: 2.5, vel: 0.035 * v, attack: 0.002, wet: 0.02 });
+        break;
+      case 'wet':
+        heel(230, 0.09);
+        this.noise({ t: t + 0.015, dur: 0.16, type: 'bandpass', f: 1600 * r(), q: 1.1, vel: 0.028 * v, attack: 0.01, sweep: 900, wet: 0.05 });
+        break;
+      case 'metal':
+        heel(150, 0.11, 0.1);
+        this.noise({ t, dur: 0.1, type: 'bandpass', f: 750 * r(), q: 5, vel: 0.016 * v, attack: 0.003, wet: 0.08 });
+        break;
+      default:
+        heel(170, 0.12, 0.07);
+        this.noise({ t: t + 0.045, dur: 0.05, type: 'lowpass', f: 420 * r(), q: 0.7, vel: 0.045 * v, attack: 0.003, wet: 0.04 });
+        this.noise({ t: t + 0.01, dur: 0.05, type: 'bandpass', f: 2200 * r(), q: 0.8, vel: 0.01 * v, attack: 0.004, wet: 0.03 });
+    }
   }
   blip() { this.tone({ f: 880, dur: 0.05, vel: 0.05 }); }
   confirm() { this.tone({ f: 660, f2: 990, dur: 0.12, vel: 0.06, type: 'triangle' }); }
@@ -433,6 +456,52 @@ export class AudioEngine {
     for (let i = 0; i < 18; i++) this.tone({ t: t + Math.random() * 1.2, f: 1500 + Math.random() * 3000, dur: 0.2, type: 'triangle', vel: 0.03, wet: 0.7 });
     this.noise({ t, dur: 2, f: 5000, q: 0.5, vel: 0.15, type: 'highpass', wet: 0.6 });
   }
+  /** breaking ceramic: a crack, then many small pieces */
+  plateBreak() {
+    if (!this.ctx) return;
+    const t = this.now;
+    this.noise({ t, dur: 0.12, type: 'bandpass', f: 2600, q: 0.7, vel: 0.5, attack: 0.001, wet: 0.25 });
+    this.noise({ t, dur: 0.25, type: 'lowpass', f: 500, q: 0.8, vel: 0.25, attack: 0.001, wet: 0.2 });
+    for (let i = 0; i < 14; i++) {
+      const dt = 0.03 + Math.random() * 0.45;
+      this.tone({ t: t + dt, f: 2500 + Math.random() * 4500, dur: 0.05 + Math.random() * 0.08, type: 'triangle', vel: 0.05 * (1 - dt), wet: 0.3 });
+      this.noise({ t: t + dt, dur: 0.04, type: 'highpass', f: 4000, q: 0.7, vel: 0.06 * (1 - dt), attack: 0.001, wet: 0.2 });
+    }
+  }
+
+  /**
+   * An unintelligible raised voice (the words are on screen, the sound only
+   * carries the tone). gender: 'm' | 'f', anger 0..1
+   */
+  voice(gender = 'm', dur = 1.4, anger = 0.8) {
+    const ctx = this.ctx; if (!ctx) return;
+    const t = this.now;
+    const f0 = (gender === 'f' ? 230 : 125) * (1 + anger * 0.35);
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    const syl = Math.max(3, Math.round(dur * 5.5));
+    o.frequency.setValueAtTime(f0, t);
+    for (let i = 1; i <= syl; i++) o.frequency.linearRampToValueAtTime(f0 * (0.85 + Math.random() * 0.45 + (i === syl ? -0.2 : 0)), t + (dur * i) / syl);
+    const f1 = ctx.createBiquadFilter(); f1.type = 'bandpass'; f1.Q.value = 5;
+    const f2 = ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.Q.value = 6;
+    for (let i = 0; i <= syl; i++) {
+      const tt = t + (dur * i) / syl;
+      f1.frequency.setValueAtTime(450 + Math.random() * 450, tt);
+      f2.frequency.setValueAtTime(1100 + Math.random() * 900, tt);
+    }
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, t);
+    for (let i = 0; i < syl; i++) {
+      const a = t + (dur * i) / syl;
+      const v = (0.05 + anger * 0.06) * (0.7 + Math.random() * 0.5);
+      g.gain.linearRampToValueAtTime(v, a + 0.03);
+      g.gain.linearRampToValueAtTime(v * 0.25, a + (dur / syl) * 0.85);
+    }
+    g.gain.linearRampToValueAtTime(0, t + dur + 0.05);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600; // muffled, as if through a wall of memory
+    o.connect(f1); o.connect(f2); f1.connect(g); f2.connect(g); g.connect(lp);
+    o.start(t); o.stop(t + dur + 0.1);
+    this.out(lp, this.sfx, 0.35);
+  }
+
   thump() { this.noise({ dur: 0.25, f: 120, q: 1, vel: 0.35, type: 'lowpass' }); }
 
   /* ------------------------------------------------------------ ambience loops */

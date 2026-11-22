@@ -300,17 +300,30 @@ export default {
 
     /* ---------- 2. she jumps in at the last moment ---------- */
     const girl = g.spawn(wifeSpec('busCoat'), [-4.0, -0.25, 12], Math.PI);
-    g.camSet([-0.55, 1.45, -1.2], [-1.2, 1.1, 3.6]);
+    g.letterbox(true);
+    // through the rainy window: she is running along the sidewalk
+    g.camera.fov = 46; g.camera.updateProjectionMatrix();
+    g.camSet([-0.9, 1.35, 0.4], [-3.6, 1.0, 9]);
     await g.fade(0, 1);
-    await g.wait(1.0);
     audio.noise({ dur: 0.8, f: 2500, q: 0.6, vel: 0.12, type: 'highpass' });
     const closing = g.tween(1.4, (k) => W.setDoor(1 - k * 0.6));
     girl.blendRate = 12;
+    // the camera pans with her (tracking shot)
+    const track = g.onUpdate(() => {
+      const p = girl.root.position;
+      g.camLook = (g.camLook || p.clone()).lerp(new THREE.Vector3(p.x, 1.0, p.z), 0.18);
+      g.camera.lookAt(g.camLook);
+    });
     await g.walkTo(girl, [-2.2, 0, 3.55], { speed: 5.0, run: true });
+    track();
     await closing;
+    // the doors: she squeezes in at the very last moment
+    g.camera.fov = 38; g.camera.updateProjectionMatrix();
+    g.camSet([-0.4, 1.3, 1.8], [-1.3, 1.1, 3.6]);
     girl.root.position.y = 0;
     await g.tween(0.2, (k) => W.setDoor(0.4 + k * 0.6));
     audio.step('metal', true);
+    g.shake(0.08, 0.6);
     await g.walkTo(girl, [-0.6, 0, 3.55], { speed: 3.4, run: true });
     audio.noise({ dur: 0.6, f: 2500, q: 0.6, vel: 0.14, type: 'highpass' });
     g.tween(0.5, (k) => W.setDoor(1 - k)).catch(() => {});
@@ -318,30 +331,37 @@ export default {
     girl.state = 'idle';
     W.drive(9);
 
-    /* ---------- 3. the hero notices her ---------- */
-    g.camera.fov = 32; g.camera.updateProjectionMatrix();
-    g.camSet([0.05, 1.3, -1.6], [HERO_SEAT.x, 1.3, HERO_SEAT.z]);
+    /* ---------- 3. the hero notices her: snap turn + crash zoom ---------- */
+    g.camera.fov = 50; g.camera.updateProjectionMatrix();
+    g.camSet([0.0, 1.32, -1.9], [HERO_SEAT.x, 1.32, HERO_SEAT.z]);
     hero.blendRate = 20;
     const yawTo = lookAtYaw(hero, girl.root.position);
     await g.wait(0.35);
-    await g.tween(0.2, (k) => { hero.lookYaw = -1.05 + (yawTo + 1.05) * k; }, (k) => k);
+    g.tween(0.2, (k) => { hero.lookYaw = -1.05 + (yawTo + 1.05) * k; }, (k) => k).catch(() => {});
+    await g.fovTo(24, 0.35, (k) => 1 - (1 - k) * (1 - k) * (1 - k));
     audio.playMusic('theme', { fade: 0.4 });
-    await g.wait(1.0);
+    await g.wait(0.9);
 
-    /* ---------- 4. their eyes meet ---------- */
+    /* ---------- 4. their eyes meet: slow push-ins, the world goes quiet ---------- */
     await g.faceTo(girl, hero.root.position, 0.3);
-    g.camera.fov = 26; g.camera.updateProjectionMatrix();
-    g.camSet([-0.35, 1.55, -1.0], [-0.6, 1.5, 3.55]);
-    await g.wait(1.8);
+    g.camera.fov = 28; g.camera.updateProjectionMatrix();
+    g.camSet([-0.3, 1.55, -0.9], [-0.6, 1.5, 3.55]);
+    g.handheld = 0.6;
+    await g.pushIn(0.9, 1.8);
+    g.camSet([-0.45, 1.5, 2.6], [HERO_SEAT.x, 1.45, HERO_SEAT.z]);
+    await g.pushIn(0.7, 1.4);
 
     /* ---------- 5. ...but she quickly looks away ---------- */
     g.camSet([0.2, 1.5, 1.9], [-0.6, 1.5, 3.55]);
+    g.camera.fov = 34; g.camera.updateProjectionMatrix();
     await g.tween(0.35, (k) => { girl.root.rotation.y = lerpAngle(girl.root.rotation.y, Math.PI * 0.5, k); });
-    await g.wait(1.0);
+    await g.fovTo(44, 1.2);
+    g.handheld = 0;
     g.camera.fov = 60; g.camera.updateProjectionMatrix();
     await g.walkTo(girl, [0.55, 0, 2.5], { speed: 1.3 });
     sitAt(girl, GIRL_SEAT);
     girl.lookYaw = 0.35;
+    g.letterbox(false);
 
     /* ---------- player: stolen glances ---------- */
     hero.blendRate = 8;

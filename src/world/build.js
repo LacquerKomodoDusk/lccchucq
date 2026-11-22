@@ -28,6 +28,7 @@ export function plane(g, w, d, mat, x = 0, y = 0, z = 0, rotX = -Math.PI / 2) {
 
 /** Rectangular room centred on (cx, cz). openings: [{wall:'n'|'s'|'e'|'w', at, width}] */
 export function room(g, { cx = 0, cz = 0, w = 6, d = 6, h = 2.7, floor, wall, ceil, openings = [], thickness = 0.15 }) {
+  const skirting = M({ map: T.woodTex([2, 1], '#3e2e22') });
   const fl = plane(g, w, d, floor, cx, 0, cz);
   if (ceil) plane(g, w, d, ceil, cx, h, cz, Math.PI / 2);
   const walls = [];
@@ -49,6 +50,8 @@ export function room(g, { cx = 0, cz = 0, w = 6, d = 6, h = 2.7, floor, wall, ce
       if (side === 'e') { x = cx + w / 2; z = cz + mid; ww = thickness; dd = L; }
       const m = box(g, ww, h, dd, wall, x, 0, z, { solid: true });
       walls.push(m);
+      // skirting board on both faces of the wall
+      box(g, ww + (horiz ? 0 : 0.04), 0.1, dd + (horiz ? 0.04 : 0), skirting, x, 0, z);
     }
     // lintels over openings
     for (const o of ops) {
@@ -285,12 +288,20 @@ export function motes(g, { count = 160, area = 16, color = 0xbfb8a0, size = 2 } 
 /** a glowing memory fragment the player can pick up */
 export function memoryShard(g, x, y, z, color = 0xffe2a0) {
   const grp = new THREE.Group(); grp.position.set(x, y, z); g.scene.add(grp);
-  const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.14, 0), M({ color, unlit: true }));
+  const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0), M({ color, unlit: true, fog: false }));
   grp.add(core);
-  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: T.glowSpriteTex('#ffe8b0'), transparent: true, depthWrite: false, opacity: 0.8 }));
-  halo.scale.set(0.9, 0.9, 1); grp.add(halo);
-  const light = new THREE.PointLight(color, 0.8, 3.5); grp.add(light);
-  const off = g.onUpdate((dt, t) => { core.rotation.y += dt * 1.5; core.position.y = Math.sin(t * 2 + x) * 0.06; });
+  // halo and a tall light beam that ignore the fog, so a shard is visible from far away
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: T.glowSpriteTex('#ffe8b0'), transparent: true, depthWrite: false, opacity: 0.9, fog: false, blending: THREE.AdditiveBlending }));
+  halo.scale.set(1.4, 1.4, 1); grp.add(halo);
+  const beamM = new THREE.MeshBasicMaterial({ color: 0xffd890, transparent: true, opacity: 0.28, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.3, 14, 6, 1, true), beamM);
+  beam.position.y = 7 - y; grp.add(beam);
+  const light = new THREE.PointLight(color, 1.2, 5); grp.add(light);
+  const off = g.onUpdate((dt, t) => {
+    core.rotation.y += dt * 1.5; core.position.y = Math.sin(t * 2 + x) * 0.06;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 2.5 + x);
+    beamM.opacity = 0.18 + pulse * 0.18; halo.material.opacity = 0.7 + pulse * 0.3;
+  });
   return { grp, remove() { off(); g.scene.remove(grp); } };
 }
 
@@ -299,4 +310,73 @@ export function inscription(g, text, x, y, z, rotY = 0, { w = 3, h = 0.75, color
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), M({ map: T.textTex(text, { w: 256, h: 64, color, font }), transparent: true, unlit: true, depthWrite: false }));
   m.position.set(x, y, z); m.rotation.y = rotY; g.scene.add(m);
   return m;
+}
+
+/** Snowfall that follows the camera/player. */
+export function snow(g, { count = 900, area = 30, height = 10, speed = 1.1, color = 0xf2f2f6, size = 2 } = {}) {
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(count * 3);
+  const phase = new Float32Array(count);
+  for (let i = 0; i < count; i++) { pos.set([(Math.random() - 0.5) * area, Math.random() * height, (Math.random() - 0.5) * area], i * 3); phase[i] = Math.random() * 6.28; }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color, size, sizeAttenuation: false, transparent: true, opacity: 0.85, fog: true }));
+  pts.frustumCulled = false;
+  g.scene.add(pts);
+  const follow = { target: null };
+  g.onUpdate((dt, t) => {
+    const a = geo.attributes.position.array;
+    for (let i = 0; i < count; i++) {
+      a[i * 3 + 1] -= speed * dt * (0.7 + (i % 5) * 0.12);
+      a[i * 3] += Math.sin(t * 0.8 + phase[i]) * dt * 0.25;
+      if (a[i * 3 + 1] < 0) a[i * 3 + 1] = height;
+    }
+    geo.attributes.position.needsUpdate = true;
+    const tg = follow.target || (g.player ? g.player.root.position : null);
+    if (tg) pts.position.set(tg.x, 0, tg.z);
+  });
+  return { pts, follow };
+}
+
+/** A simple low fence along a straight line (posts + two rails). Solid. */
+export function fenceLine(g, x1, z1, x2, z2, { color = '#4a3a2c', height = 1.1, solid = true, spacing = 2 } = {}) {
+  const m = M({ map: T.woodTex([1, 1], color) });
+  const len = Math.hypot(x2 - x1, z2 - z1);
+  const ang = Math.atan2(x2 - x1, z2 - z1);
+  const n = Math.max(1, Math.round(len / spacing));
+  for (let i = 0; i <= n; i++) {
+    const k = i / n;
+    box(g, 0.1, height, 0.1, m, x1 + (x2 - x1) * k, 0, z1 + (z2 - z1) * k);
+  }
+  for (const y of [height * 0.35, height * 0.8]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, len), m);
+    rail.position.set((x1 + x2) / 2, y, (z1 + z2) / 2);
+    rail.rotation.y = ang;
+    g.scene.add(rail);
+  }
+  if (solid) {
+    // approximate the segment with small square colliders
+    const steps = Math.max(1, Math.ceil(len / 0.5));
+    for (let i = 0; i <= steps; i++) {
+      const x = x1 + (x2 - x1) * (i / steps), z = z1 + (z2 - z1) * (i / steps);
+      g.collider(x - 0.2, x + 0.2, z - 0.2, z + 0.2);
+    }
+  }
+}
+
+/** Fence around an ellipse (rx, rz) — makes a location's border visible. */
+export function fenceRing(g, rx, rz, { segments = 36, cx = 0, cz = 0, gapAt = null, gapWidth = 0, ...opts } = {}) {
+  for (let i = 0; i < segments; i++) {
+    const a0 = (i / segments) * Math.PI * 2, a1 = ((i + 1) / segments) * Math.PI * 2;
+    if (gapAt !== null) {
+      const mid = (a0 + a1) / 2;
+      let d = Math.abs(((mid - gapAt + Math.PI) % (Math.PI * 2)) - Math.PI);
+      if (d < gapWidth) continue;
+    }
+    fenceLine(g, cx + Math.cos(a0) * rx, cz + Math.sin(a0) * rz, cx + Math.cos(a1) * rx, cz + Math.sin(a1) * rz, opts);
+  }
+}
+
+/** snowy ground texture */
+export function snowGround(repeat = [1, 1]) {
+  return T.noiseTex('#d8dce2', { amount: 0.12, seed: 51, repeat, speck: 14 });
 }

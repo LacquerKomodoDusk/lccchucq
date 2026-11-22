@@ -4,7 +4,7 @@ import { audio } from '../engine/audio.js';
 import { input } from '../engine/input.js';
 import * as B from '../world/build.js';
 import * as T from '../engine/textures.js';
-import { apartment, pondPark } from '../world/places.js';
+import { apartment, playground } from '../world/places.js';
 import { spawnHero, spawnWife, think, chapterStart, endMemory, waitInteract, waitReach, V3, setWorldMood, fourthWall, realClock } from './common.js';
 import { dreamSegment } from './dream.js';
 
@@ -103,33 +103,34 @@ export default {
     await g.fade(1, 2);
     g.speedMul = 1;
 
-    /* -------- warm park -------- */
-    pondPark(g, { warm: true, summer: true });
-    setWorldMood(g, { sat: 1.05, tint: [1.08, 1.0, 0.88], noise: 0.025 });
-    const h2 = spawnHero(g, 'everyday', [0, 0, 13], Math.PI);
-    const w2 = spawnWife(g, 'summer', [-3, 0, 10.4], Math.PI / 2);
+    /* -------- a walk: the lonely playground -------- */
+    playground(g, { warm: true });
+    setWorldMood(g, { sat: 0.95, tint: [1.07, 1.0, 0.9], noise: 0.025 });
+    const h2 = spawnHero(g, 'everyday', [0, 0, 12], Math.PI);
+    const w2 = spawnWife(g, 'summer', [-1.0, 0, -5.4], 0);
     w2.setBaby(true); w2.state = 'hold';
-    stroller(g, -2.2, 10.8, Math.PI / 2);
+    stroller(g, 0.2, -5.6, Math.PI / 2);
     g.followCamera({ dist: 3.2, height: 1.9, lookH: 1.3 });
     g.snapCamera();
-    audio.ambience('birds', true, 0.7);
+    audio.ambience('birds', true, 0.35);
+    audio.ambience('wind', true, 0.2);
     audio.playMusic('warm', { fade: 3 });
     await g.fade(0, 2);
-    g.ui.subtitle('Но были и прогулки. Солнце. Трава.', 4);
+    g.ui.subtitle('Но были и прогулки. Пустая площадка во дворе — только мы.', 4.5);
     g.control(true);
     g.ui.objective('Подойти к ним');
-    await waitInteract(g, { pos: V3(-3, 0, 10.4), radius: 2.0, label: 'Посмотреть на них', facing: false });
+    await waitInteract(g, { pos: V3(-1.0, 0, -5.4), radius: 2.0, label: 'Посмотреть на них', facing: false });
     g.control(false);
     g.ui.objective(null);
     await g.faceTo(h2, w2.root.position, 0.4);
     await g.faceTo(w2, h2.root.position, 0.4);
     w2.setExpression('smile'); h2.setExpression('smile');
     g.camera.fov = 40; g.camera.updateProjectionMatrix();
-    g.camSet([h2.root.position.x + 0.3, 1.6, h2.root.position.z + 0.8], [-3, 1.3, 10.4]);
+    g.camSet([h2.root.position.x + 0.3, 1.6, h2.root.position.z + 0.8], [-1.0, 1.3, -5.4]);
     await g.wait(1.5);
     await think(g, 'Я был счастлив просто смотреть на них. На неё — с нашим ребёнком на руках.');
     g.camera.fov = 60; g.camera.updateProjectionMatrix();
-    await g.camMove([0.5, 3.2, 14], [-3, 1.2, 10.4], 5);
-    await endMemory(g, 'Воспоминание: «Солнце в парке»');
+    await g.camMove([7, 6, 9], [-1, 0.8, -4.5], 6);
+    await endMemory(g, 'Воспоминание: «Площадка»');
   },
 };

@@ -91,35 +91,71 @@ export function cityStreet(g, { length = 80, night = true, snow = false } = {}) 
   g.surface = 'hard';
 }
 
-/** Park with a pond (Chapter 4 / 6). */
-export function pondPark(g, { warm = false, summer = false } = {}) {
-  const bg = warm ? 0x9aa6a0 : 0x5a6268;
-  g.newScene({ bg, fog: [bg, 8, 45], hemi: warm ? [0xfff0d0, 0x5a5a3a, 1.15] : [0xd0d8d8, 0x404838, 1.0], sun: [0xfff0c8, warm ? 0.9 : 0.5, [5, 10, 4]] });
-  B.plane(g, 80, 80, B.M({ map: T.grassTex([30, 30], summer ? '#5a7a3a' : '#5a6a3a') }), 0, 0, 0);
-  // pond (ellipse made from a circle)
-  const water = new THREE.Mesh(new THREE.CircleGeometry(6, 14), B.M({ map: T.waterTex([4, 4]), emissive: 0x0a1418 }));
+/** Park with a pond (Chapter 4). `snow` = snowy November. */
+export function pondPark(g, { warm = false, summer = false, snow = false, evening = false } = {}) {
+  const bg = evening ? 0x1a2030 : snow ? 0x8c9098 : warm ? 0x9aa6a0 : 0x5a6268;
+  g.newScene({
+    bg, fog: [bg, snow ? 7 : 8, snow ? 38 : 45],
+    hemi: evening ? [0x6a7898, 0x1a1a18, 0.65] : snow ? [0xe4e8f0, 0x707078, 1.15] : warm ? [0xfff0d0, 0x5a5a3a, 1.15] : [0xd0d8d8, 0x404838, 1.0],
+    sun: [evening ? 0x8090c0 : snow ? 0xdde4f0 : 0xfff0c8, evening ? 0.2 : snow ? 0.4 : warm ? 0.9 : 0.5, [5, 10, 4]],
+  });
+  B.plane(g, 80, 80, B.M({ map: snow ? B.snowGround([30, 30]) : T.grassTex([30, 30], summer ? '#5a7a3a' : '#5a6a3a') }), 0, 0, 0);
+  // pond (ellipse made from a circle); in November it is dark, with thin ice at the edge
+  const water = new THREE.Mesh(new THREE.CircleGeometry(6, 14), B.M({ map: T.waterTex([4, 4]), color: snow ? '#7a8a94' : '#ffffff', emissive: 0x0a1418 }));
   water.rotation.x = -Math.PI / 2; water.scale.set(1.4, 1, 1); water.position.set(0, 0.02, 0);
   g.add(water);
-  const shore = new THREE.Mesh(new THREE.RingGeometry(6, 6.8, 14), B.M({ map: T.noiseTex('#6a5a42', { amount: 0.3, seed: 2 }) }));
+  if (snow) {
+    const ice = new THREE.Mesh(new THREE.RingGeometry(4.6, 6, 14), B.M({ color: '#b8c8d4', transparent: true, opacity: 0.75 }));
+    ice.rotation.x = -Math.PI / 2; ice.scale.set(1.4, 1, 1); ice.position.y = 0.025; g.add(ice);
+  }
+  const shore = new THREE.Mesh(new THREE.RingGeometry(6, 6.8, 14), B.M({ map: T.noiseTex(snow ? '#b8bcc2' : '#6a5a42', { amount: 0.3, seed: 2 }) }));
   shore.rotation.x = -Math.PI / 2; shore.scale.set(1.4, 1, 1); shore.position.y = 0.015; g.add(shore);
-  g.onUpdate((dt) => { water.material.map.offset.x += dt * 0.01; });
-  // path ring
-  const path = new THREE.Mesh(new THREE.RingGeometry(8, 9.4, 20), B.M({ map: T.noiseTex('#8a7a62', { amount: 0.25, seed: 4 }) }));
+  g.onUpdate((dt) => { water.material.map.offset.x += dt * (snow ? 0.003 : 0.01); });
+  // path ring (trodden snow in winter)
+  const path = new THREE.Mesh(new THREE.RingGeometry(8, 9.4, 20), B.M({ map: T.noiseTex(snow ? '#a4a6ac' : '#8a7a62', { amount: 0.25, seed: 4 }) }));
   path.rotation.x = -Math.PI / 2; path.scale.set(1.3, 1, 1); path.position.y = 0.01; g.add(path);
+  const snowCap = B.M({ color: '#eef0f4' });
   for (let i = 0; i < 22; i++) {
     const a = (i / 22) * Math.PI * 2, d = 12 + (i % 3) * 3;
-    B.tree(g, Math.cos(a) * d * 1.3, Math.sin(a) * d, { h: 4 + (i % 4), autumn: !summer, color: summer ? '#4a6a30' : ['#8a6a2a', '#6a7a30', '#9a5a22'][i % 3] });
+    const x = Math.cos(a) * d * 1.3, z = Math.sin(a) * d;
+    if (snow) {
+      const h = 4 + (i % 4);
+      if (i % 3 === 0) {
+        // snowy fir
+        const fir = new THREE.Group(); fir.position.set(x, 0, z); g.add(fir);
+        for (let k = 0; k < 3; k++) {
+          const cone = new THREE.Mesh(new THREE.ConeGeometry(1.3 - k * 0.35, 1.6, 6), B.M({ color: '#2e3e34', flat: true }));
+          cone.position.y = 1.2 + k * 1.0; fir.add(cone);
+          const capM = new THREE.Mesh(new THREE.ConeGeometry(1.0 - k * 0.3, 0.6, 6), snowCap);
+          capM.position.y = 1.75 + k * 1.0; fir.add(capM);
+        }
+        g.collider(x - 0.4, x + 0.4, z - 0.4, z + 0.4);
+      } else {
+        B.bareTree(g, x, z, { h });
+        const cap = new THREE.Mesh(new THREE.IcosahedronGeometry(0.25, 0), snowCap); cap.scale.set(1.4, 0.5, 1.4); cap.position.set(x, h * 0.98, z); g.add(cap);
+      }
+    } else {
+      B.tree(g, x, z, { h: 4 + (i % 4), autumn: !summer, color: summer ? '#4a6a30' : ['#8a6a2a', '#6a7a30', '#9a5a22'][i % 3] });
+    }
   }
-  for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2 + 0.4; B.bench(g, Math.cos(a) * 10.4 * 1.3, Math.sin(a) * 10.4, -a - Math.PI / 2); }
-  // pond blocks walking
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + 0.4;
+    const bx = Math.cos(a) * 10.4 * 1.3, bz = Math.sin(a) * 10.4;
+    B.bench(g, bx, bz, -a - Math.PI / 2);
+    if (snow) B.box(g, 1.5, 0.06, 0.4, snowCap, bx, 0.49, bz, { rotY: -a - Math.PI / 2 });
+  }
+  if (snow || evening) for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 + 0.2; B.lampPost(g, Math.cos(a) * 9.9 * 1.3, Math.sin(a) * 9.9, { on: true, intensity: 0.7, dist: 7, color: 0xffe0b0 }); }
+  // visible border of the park: a low fence
+  B.fenceRing(g, 22 * 1.3, 22, { segments: 40, color: snow ? '#3a3030' : '#4a3a2c', solid: false });
+  // pond blocks walking; the fence holds you in
   g.bounds = (p) => {
-    const ex = p.x / 1.4, ez = p.z;
-    const d = Math.hypot(ex, ez);
+    const d = Math.hypot(p.x / 1.4, p.z);
     if (d < 6.6) { const k = 6.6 / d; p.x *= k; p.z *= k; }
     const far = Math.hypot(p.x / 1.3, p.z);
-    if (far > 22) { p.x *= 22 / far; p.z *= 22 / far; }
+    if (far > 21.4) { p.x *= 21.4 / far; p.z *= 21.4 / far; }
   };
-  g.surface = 'grass';
+  if (snow) B.snow(g, { count: 1000 });
+  g.surface = snow ? 'snow' : 'grass';
   return { water };
 }
 
@@ -159,4 +195,150 @@ export function office(g) {
   const l = B.lamp(g, 0, 1.4, 1.2, 0x9ab8e8, 0.8, 4, { bulb: false });
   g.surface = 'hard';
   return { screens, light: l };
+}
+
+/**
+ * A lonely children's playground between panel blocks, fenced on all sides.
+ * 20 x 16 m centred at origin, gate on the south side.
+ */
+export function playground(g, { warm = true } = {}) {
+  const bg = warm ? 0x9a948a : 0x6a6c70;
+  g.newScene({ bg, fog: [bg, 10, 48], hemi: warm ? [0xffe8c8, 0x5a5040, 1.1] : [0xc8ccd4, 0x404040, 0.9], sun: [0xffd8a0, warm ? 0.85 : 0.4, [-6, 7, 4]] });
+  B.plane(g, 90, 90, B.M({ map: T.grassTex([30, 30], '#5e6a44') }), 0, -0.01, 0);
+  // rubber / sand ground of the playground
+  B.plane(g, 20, 16, B.M({ map: T.noiseTex('#8a7a62', { amount: 0.25, seed: 61, repeat: [8, 6] }) }), 0, 0, 0);
+  const W = 10, D = 8;
+  // fence with a gate on the south side
+  const fc = { color: '#3a4a3a', height: 1.0 };
+  B.fenceLine(g, -W, -D, W, -D, fc);
+  B.fenceLine(g, -W, -D, -W, D, fc);
+  B.fenceLine(g, W, -D, W, D, fc);
+  B.fenceLine(g, -W, D, -1.2, D, fc);
+  B.fenceLine(g, 1.2, D, W, D, fc);
+  g.bounds = (p) => { p.x = Math.max(-W + 0.4, Math.min(W - 0.4, p.x)); p.z = Math.max(-D + 0.4, Math.min(D + 6, p.z)); if (p.z > D - 0.4 && Math.abs(p.x) > 1.0) p.z = Math.min(p.z, D - 0.4); };
+  const metal = B.M({ color: '#7a3a32' });
+  const metal2 = B.M({ color: '#3a5a7a' });
+  // swings (one swaying a little on its own)
+  const swX = -5, swZ = -3;
+  B.box(g, 0.08, 2.2, 0.08, metal, swX - 1.6, 0, swZ, { solid: true });
+  B.box(g, 0.08, 2.2, 0.08, metal, swX + 1.6, 0, swZ, { solid: true });
+  B.box(g, 3.3, 0.08, 0.08, metal, swX, 2.2, swZ);
+  const swings = [];
+  for (const dx of [-0.8, 0.8]) {
+    const pivot = new THREE.Group(); pivot.position.set(swX + dx, 2.2, swZ); g.add(pivot);
+    const ch = B.M({ color: '#555' });
+    B.box(g, 0.02, 1.7, 0.02, ch, -0.22, -1.7, 0, { parent: pivot });
+    B.box(g, 0.02, 1.7, 0.02, ch, 0.22, -1.7, 0, { parent: pivot });
+    B.box(g, 0.5, 0.05, 0.25, B.M({ map: T.woodTex([1, 1], '#6a4a30') }), 0, -1.72, 0, { parent: pivot });
+    swings.push(pivot);
+  }
+  g.onUpdate((dt, t) => { swings[0].rotation.x = Math.sin(t * 1.4) * 0.18; swings[1].rotation.x = Math.sin(t * 1.4 + 2) * 0.04; });
+  // slide
+  B.box(g, 0.08, 1.6, 0.08, metal2, 4.2, 0, -4.4, { solid: true });
+  B.box(g, 0.08, 1.6, 0.08, metal2, 5.0, 0, -4.4, { solid: true });
+  B.box(g, 0.9, 0.06, 0.9, metal2, 4.6, 1.5, -4.4);
+  const slide = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 3.0), B.M({ color: '#b8a040' }));
+  slide.position.set(4.6, 0.8, -2.5); slide.rotation.x = -0.52; g.add(slide);
+  for (let i = 0; i < 5; i++) B.box(g, 0.8, 0.04, 0.12, metal2, 4.6, i * 0.3, -4.95);
+  g.collider(4.2, 5.0, -4.9, -1.2);
+  // sandbox
+  const wood = B.M({ map: T.woodTex([2, 1], '#6a4a30') });
+  B.box(g, 3, 0.3, 0.15, wood, 4.5, 0, 3.2); B.box(g, 3, 0.3, 0.15, wood, 4.5, 0, 5.8);
+  B.box(g, 0.15, 0.3, 2.6, wood, 3.0, 0, 4.5); B.box(g, 0.15, 0.3, 2.6, wood, 6.0, 0, 4.5);
+  B.plane(g, 2.8, 2.5, B.M({ map: T.noiseTex('#c8b088', { amount: 0.2, seed: 7 }) }), 4.5, 0.15, 4.5);
+  B.box(g, 0.25, 0.25, 0.25, B.M({ color: '#c84a3a' }), 4.0, 0.15, 4.2);
+  g.collider(2.9, 6.1, 3.1, 5.9);
+  // carousel
+  const car = new THREE.Group(); car.position.set(-4.5, 0, 3.8); g.add(car);
+  const disk = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 0.12, 10), B.M({ color: '#3a6a4a' })); disk.position.y = 0.3; car.add(disk);
+  for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; B.box(g, 0.05, 0.7, 0.05, metal, Math.cos(a) * 1.1, 0.36, Math.sin(a) * 1.1, { parent: car }); }
+  g.onUpdate((dt) => { car.rotation.y += dt * 0.05; });
+  g.collider(-5.9, -3.1, 2.4, 5.2);
+  // one bench and one lamp
+  B.bench(g, -1.5, -6.6, 0);
+  B.lampPost(g, 1.6, -6.9, { on: !warm, intensity: 1.0 });
+  // panel blocks around — the playground is empty, it's just us
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + 0.3;
+    B.building(g, Math.cos(a) * 30, Math.sin(a) * 28, 14, 16 + (i % 3) * 5, 10, { lit: 0.15, base: '#7a7468', seed: 70 + i, solid: false });
+  }
+  for (let i = 0; i < 8; i++) B.bareTree(g, -16 + i * 4.5, 12 + (i % 2) * 2, { solid: false, h: 4 + (i % 3) });
+  g.surface = 'hard';
+}
+
+/**
+ * Toy warehouse at night: metal racks full of toy boxes, pallets, a packing table.
+ * 18 x 14 m centred at origin. Returns pickup piles and rack slots for the work task.
+ */
+export function toyWarehouse(g) {
+  g.newScene({ bg: 0x14161c, fog: [0x14161c, 6, 28], hemi: [0xa8b0c0, 0x2a2620, 0.9], sun: null });
+  const W = 18, D = 14, H = 6;
+  B.room(g, { w: W, d: D, h: H, floor: B.M({ map: T.warehouseFloorTex([9, 7]) }), wall: B.M({ map: T.corrugatedTex([12, 3]) }), ceil: B.M({ color: '#2a2c30' }) });
+  // yellow safety lines along the aisles
+  const yellow = B.M({ color: '#c8a030', unlit: false });
+  for (const z of [-3.1, 0.9, 4.9]) B.plane(g, 14, 0.08, yellow, 0, 0.005, z);
+  // racks: 3 rows, 3 levels, full of toy boxes
+  const upright = B.M({ color: '#2a4a7a' });
+  const beam = B.M({ color: '#d0781e' });
+  const colors = ['#c84a3a', '#3a7ac8', '#e0b030', '#4aa860', '#a04ab0', '#e07a30'];
+  const slots = [];
+  const rows = [-5.2, -1.2, 2.8];
+  rows.forEach((z, ri) => {
+    for (let x = -7; x <= 7; x += 2.8) {
+      for (const dz of [-0.45, 0.45]) B.box(g, 0.08, 4.2, 0.08, upright, x, 0, z + dz);
+    }
+    for (let lvl = 0; lvl < 4; lvl++) {
+      const y = 0.15 + lvl * 1.3;
+      B.box(g, 14.2, 0.08, 0.06, beam, 0, y, z - 0.45);
+      B.box(g, 14.2, 0.08, 0.06, beam, 0, y, z + 0.45);
+      B.box(g, 14.0, 0.03, 0.9, B.M({ map: T.woodTex([6, 1], '#7a6a50') }), 0, y + 0.08, z);
+      if (lvl === 3) continue;
+      for (let x = -6.6; x < 6.8; x += 0.7) {
+        const empty = (lvl === 1 && ri === 1 && x > -1.6 && x < 0.6); // gap the player fills
+        if (empty) { if (slots.length < 3 && Math.abs(x + 0.5 + slots.length * 0.7 - 0.0) < 3) slots.push(new THREE.Vector3(x, y + 0.11, z)); continue; }
+        if ((((Math.round(x * 10) * 7 + lvl * 13 + ri * 5) % 7) + 7) % 7 === 0) continue;
+        const c = colors[Math.abs(Math.round(x * 3 + lvl * 2 + ri)) % colors.length];
+        const h = 0.35 + ((Math.abs(x * 7) + lvl) % 3) * 0.12;
+        B.box(g, 0.6, h, 0.7, B.M({ map: T.toyBoxTex(c, Math.abs(Math.round(x * 5 + lvl))) }), x, y + 0.11, z);
+      }
+    }
+    g.collider(-7.2, 7.2, z - 0.55, z + 0.55);
+  });
+  // pallets with brown cardboard boxes near the gate
+  const card = B.M({ map: T.noiseTex('#9a7a50', { amount: 0.2, seed: 22 }) });
+  const pallet = B.M({ map: T.woodTex([1, 1], '#8a7050') });
+  const piles = [];
+  for (const [x, z] of [[-6.2, 5.6], [-3.6, 5.8], [-1.0, 5.6]]) {
+    B.box(g, 1.2, 0.14, 1.0, pallet, x, 0, z);
+    for (let i = 0; i < 6; i++) B.box(g, 0.5, 0.4, 0.45, card, x - 0.28 + (i % 2) * 0.56, 0.14 + Math.floor(i / 2) * 0.4, z - 0.22 + ((i >> 1) % 2) * 0.44);
+    g.collider(x - 0.6, x + 0.6, z - 0.5, z + 0.5);
+    piles.push(new THREE.Vector3(x, 0, z - 0.9));
+  }
+  // packing table with lamp, scanner and tape
+  B.table(g, 5.2, 5.8, 1.8, 0.8, 0.9, { color: '#6a5a48' });
+  B.box(g, 0.3, 0.06, 0.2, B.M({ color: '#222' }), 4.7, 0.9, 5.8);
+  B.box(g, 0.12, 0.12, 0.12, B.M({ color: '#c8a030' }), 5.6, 0.9, 5.7);
+  const deskLamp = B.lamp(g, 5.2, 1.5, 5.8, 0xffd8a0, 1.2, 4);
+  void deskLamp;
+  // a hand pallet truck
+  B.box(g, 0.5, 0.08, 1.2, B.M({ color: '#b03a2a' }), 7.4, 0.05, 4.0);
+  B.box(g, 0.05, 1.0, 0.05, B.M({ color: '#222' }), 7.4, 0.1, 4.7);
+  // fluorescent strips, one of them flickering
+  const lights = [];
+  for (const [x, z] of [[-4, -3.1], [4, -3.1], [-4, 0.9], [4, 0.9], [0, 4.9]]) {
+    const strip = B.box(g, 1.6, 0.06, 0.18, B.M({ color: '#e8f0f0', unlit: true }), x, H - 0.4, z);
+    const l = new THREE.PointLight(0xdfe8f0, 1.0, 9, 1.4); l.position.set(x, H - 0.6, z); g.add(l);
+    lights.push({ strip, l });
+  }
+  g.onUpdate((dt, t) => {
+    const f = lights[2];
+    const on = Math.sin(t * 13) > -0.85 || Math.random() < 0.7;
+    f.l.intensity = on ? 1.0 : 0.1; f.strip.material.color.set(on ? '#e8f0f0' : '#555');
+  });
+  // wall clock
+  const clock = B.inscription(g, '21:47', 0, 3.6, D / 2 - 0.1, Math.PI, { w: 1.2, h: 0.3, color: '#e05030' });
+  const setClock = (txt) => { clock.material.map = T.textTex(txt, { w: 256, h: 64, color: '#e05030', font: 13 }); clock.material.needsUpdate = true; };
+  g.surface = 'hard';
+  // the three empty places on the middle rack, at the aisle side (z + 0.55)
+  return { piles, slots: slots.slice(0, 3), setClock };
 }

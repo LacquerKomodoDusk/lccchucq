@@ -89,6 +89,8 @@ export class Game {
     this.speedMul = 1;
     this.turnSpeed = 2.6;
     this.debugGoal = null;
+    this.handheld = 0;
+    this.shakeAmt = 0;
     this.activeInteract = null;
     this.busy = false;
     globalUniforms.uWarp.value = 0;
@@ -120,6 +122,7 @@ export class Game {
     }
     this.ui.prompt(null); this.ui.objective(null); this.ui.meter(null); this.ui.battle(false);
     this.camera.fov = 60; this.camera.updateProjectionMatrix();
+    this.letterbox(false);
     return this.scene;
   }
 
@@ -289,12 +292,18 @@ export class Game {
 
   updatePlayer(dt) {
     const c = this.player; if (!c) return;
-    if (!this.controlEnabled || this.busy || this.ui.dlg) { if (c.state === 'walk' || c.state === 'run') c.state = 'idle'; return; }
+    if (!this.controlEnabled || this.busy || this.ui.dlg) {
+      if (this.playerState && this.playerState.vel) this.playerState.vel.set(0, 0, 0);
+      if (c.state === 'walk' || c.state === 'run') c.state = 'idle';
+      return;
+    }
     const ps = this.playerState;
     const ix = (input.isDown('right') ? 1 : 0) - (input.isDown('left') ? 1 : 0);
     const iz = (input.isDown('up') ? 1 : 0) - (input.isDown('down') ? 1 : 0);
     const moving = (ix !== 0 || iz !== 0) && (this.speedMul ?? 1) > 0;
     const running = input.isDown('run') && moving && !this.noRun;
+    const vel = ps.vel || (ps.vel = new THREE.Vector3());
+    const want = new THREE.Vector3();
     if (moving) {
       // directions relative to the camera: W = away from camera, A/D = strafe
       const yaw = this.camMode === 'follow' ? this.camYaw : c.root.rotation.y;
@@ -302,17 +311,34 @@ export class Game {
       const rx = -fz, rz = fx; // screen-right
       let mx = fx * iz + rx * ix, mz = fz * iz + rz * ix;
       const len = Math.hypot(mx, mz); mx /= len; mz /= len;
-      const target = Math.atan2(mx, mz);
-      c.root.rotation.y = lerpAngle(c.root.rotation.y, target, Math.min(1, dt * 10));
       const speed = (running ? 3.7 : 1.75) * (this.speedMul ?? 1);
+      want.set(mx * speed, 0, mz * speed);
+      // turn toward the movement direction; a sharp turn slows you down a little
+      const target = Math.atan2(mx, mz);
+      const before = c.root.rotation.y;
+      c.root.rotation.y = lerpAngle(before, target, Math.min(1, dt * (running ? 7 : 9)));
+      const turnErr = Math.abs(lerpAngle(0, target - c.root.rotation.y, 1));
+      if (turnErr > 1.2) want.multiplyScalar(0.35);
+    }
+    // acceleration / deceleration instead of instant start & stop
+    const rate = moving ? (want.length() > vel.length() ? 7 : 5) : 9;
+    vel.lerp(want, 1 - Math.exp(-dt * rate));
+    if (!moving && vel.length() < 0.05) vel.set(0, 0, 0);
+    const sp = vel.length();
+    if (sp > 0) {
       const p = c.root.position;
-      p.x += mx * speed * dt;
-      p.z += mz * speed * dt;
+      p.x += vel.x * dt;
+      p.z += vel.z * dt;
+      const ox = p.x, oz = p.z;
       this.resolve(p, this.playerRadius ?? 0.28);
-      if (c.state !== 'scary') c.state = running ? 'run' : 'walk';
-      ps.stepPhase += dt * speed * (running ? 1.6 : 1.9);
-      if (ps.stepPhase > 1) { ps.stepPhase -= 1; audio.step(this.surface, running); }
-    } else if (c.state === 'walk' || c.state === 'run') c.state = 'idle';
+      // sliding along walls: drop the blocked part of the velocity
+      if (Math.abs(p.x - ox) > 1e-4) vel.x *= 0.3;
+      if (Math.abs(p.z - oz) > 1e-4) vel.z *= 0.3;
+    }
+    if (c.state !== 'scary') {
+      if (sp > 0.25) c.state = sp > 2.6 ? 'run' : 'walk';
+      else if (c.state === 'walk' || c.state === 'run') c.state = 'idle';
+    }
 
     // triggers
     for (const t of this.triggers) {
@@ -358,6 +384,60 @@ export class Game {
   }
   setFade(v) { this.fadeV = v; }
 
+  /* ---------------- cinematic camera ---------------- */
+
+  /** tween the field of view */
+  fovTo(fov, dur = 1, ease) {
+    const f0 = this.camera.fov;
+    return this.tween(dur, (k) => { this.camera.fov = f0 + (fov - f0) * k; this.camera.updateProjectionMatrix(); }, ease);
+  }
+
+  /** slow orbit around a point: angles in radians, height & radius may change during the move */
+  camOrbit(center, { r0 = 3, r1 = r0, h0 = 1.6, h1 = h0, a0 = 0, a1 = 1, look = 1.4, dur = 6 } = {}) {
+    this.camMode = 'script';
+    const c = new THREE.Vector3(...(Array.isArray(center) ? center : center.toArray()));
+    return this.tween(dur, (k) => {
+      const a = a0 + (a1 - a0) * k, r = r0 + (r1 - r0) * k, h = h0 + (h1 - h0) * k;
+      this.camera.position.set(c.x + Math.sin(a) * r, h, c.z + Math.cos(a) * r);
+      this.camLook = new THREE.Vector3(c.x, look, c.z);
+      this.camera.lookAt(this.camLook);
+    }, (k) => k * k * (3 - 2 * k));
+  }
+
+  /** slow push-in toward the current look target */
+  pushIn(amount = 0.6, dur = 3) {
+    this.camMode = 'script';
+    const p0 = this.camera.position.clone();
+    const look = this.camLook ? this.camLook.clone() : p0.clone().add(this.camera.getWorldDirection(new THREE.Vector3()));
+    const dir = look.clone().sub(p0).normalize();
+    return this.tween(dur, (k) => { this.camera.position.copy(p0).addScaledVector(dir, amount * k); this.camera.lookAt(look); }, (k) => 1 - (1 - k) * (1 - k));
+  }
+
+  /** "vertigo" dolly-zoom: the subject keeps its size while the world stretches */
+  async dollyZoom(target, { dist0 = 1.2, dist1 = 3.2, fov0 = 60, height = 1.6, dir = null, dur = 1.6 } = {}) {
+    this.camMode = 'script';
+    const t = new THREE.Vector3(...(Array.isArray(target) ? target : target.toArray()));
+    const d = dir ? new THREE.Vector3(...dir).normalize() : this.camera.position.clone().sub(t).setY(0).normalize();
+    const width = 2 * dist0 * Math.tan(THREE.MathUtils.degToRad(fov0 / 2));
+    await this.tween(dur, (k) => {
+      const dist = dist0 + (dist1 - dist0) * k;
+      this.camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(width / (2 * dist)));
+      this.camera.updateProjectionMatrix();
+      this.camera.position.set(t.x + d.x * dist, height, t.z + d.z * dist);
+      this.camLook = t.clone();
+      this.camera.lookAt(t);
+    });
+  }
+
+  /** reset lens after a cinematic shot */
+  resetLens() { this.camera.fov = 60; this.camera.updateProjectionMatrix(); this.handheld = 0; this.letterbox(false); }
+
+  /** camera shake: amount ~0.1 small, 0.3 strong */
+  shake(amount = 0.2, decay = 0.6) { this.shakeAmt = Math.max(this.shakeAmt ?? 0, amount); this.shakeDecay = decay; }
+
+  /** cinematic letterbox bars */
+  letterbox(on) { document.getElementById('letterbox').classList.toggle('on', !!on); }
+
   /** real-world minutes since the game was opened (used by fourth-wall moments) */
   playMinutes() { return Math.max(1, Math.round((performance.now() - this.startedAt) / 60000)); }
 
@@ -393,13 +473,29 @@ export class Game {
         c._last.copy(p);
         c.update(dt, c.speed);
       }
+      // footsteps follow the walk animation (one per foot contact)
+      const pl = this.player;
+      if (pl && pl.stepped && (pl.state === 'walk' || pl.state === 'run') && pl.speed > 0.3) audio.step(this.surface, pl.state === 'run');
+      for (const c of this.chars) c.stepped = false;
       this.updateCamera(dt);
       this.ui.update(dt);
     }
     this.actConsumed = false;
     if (this.onFrame) this.onFrame(dt);
     document.getElementById('fade').style.opacity = this.fadeV;
+    // camera shake (handheld / impacts): applied only for this render
+    this.shakeAmt = Math.max(0, (this.shakeAmt ?? 0) - dt * (this.shakeDecay ?? 1));
+    const hand = this.handheld ?? 0;
+    const sh = this.shakeAmt * this.shakeAmt + hand * 0.012;
+    const off = new THREE.Vector3();
+    if (sh > 0) {
+      const tt = this.time;
+      off.set((Math.sin(tt * 23.1) + Math.sin(tt * 7.3)) * sh, (Math.sin(tt * 19.7) + Math.cos(tt * 5.1)) * sh * 0.7, (Math.cos(tt * 17.3)) * sh * 0.5);
+      if (hand) off.add(new THREE.Vector3(Math.sin(tt * 0.9) * hand * 0.02, Math.sin(tt * 1.3) * hand * 0.015, 0));
+      this.camera.position.add(off);
+    }
     this.r.render(this.scene, this.camera);
+    if (sh > 0) this.camera.position.sub(off);
     input.endFrame();
   }
 }

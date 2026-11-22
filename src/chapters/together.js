@@ -73,20 +73,19 @@ export default {
     await think(g, 'Первые месяцы были весёлыми и хаотичными.');
     await g.fade(1, 1.5);
 
-    /* -------- the pond -------- */
-    pondPark(g);
-    const h = spawnHero(g, 'everyday', [0, 0, 10], Math.PI);
-    const w = spawnWife(g, 'summer', [1.5, 0, 8.6], Math.PI);
+    /* -------- the pond: snowy November -------- */
+    pondPark(g, { snow: true });
+    const h = spawnHero(g, 'rain', [0, 0, 11], Math.PI);
+    const w = spawnWife(g, 'busCoat', [1.5, 0, 9.6], Math.PI, { scarf: '#8a6a5a' });
     g.followCamera({ dist: 3.4, height: 2.0, lookH: 1.3 });
     g.snapCamera();
-    audio.ambience('birds', true, 0.6);
+    audio.ambience('wind', true, 0.35);
     audio.playMusic('warm', { fade: 2 });
     await g.fade(0, 2);
-    g.ui.subtitle('Прогулка возле пруда.', 3);
+    g.ui.subtitle('Ноябрь. Первый снег. Прогулка возле пруда.', 4);
     await g.wait(2);
-    // she walks along the path ahead
     const walkAround = g.walkTo(w, [7.5, 0, 6.5], { speed: 1.1 });
-    await g.ui.say('Она', 'Смотри, утки. Сколько их тут…');
+    await g.ui.say('Она', 'Снег… Смотри, пруд ещё не замёрз.');
     await walkAround;
     w.state = 'idle';
     await g.faceTo(w, V3(0, 0, 0));
@@ -104,34 +103,60 @@ export default {
     w.state = 'fear';
     audio.gasp();
     await g.ui.say('Ты', STORY.pondPhrase, { auto: 2 });
-    // she runs around the pond, he chases (player controlled)
+
+    /* -------- the chase around the pond -------- */
     w.state = 'run';
-    w.setExpression('fear');
     h.state = 'idle';
+    audio.playMusic('theme', { fade: 0.5, intensity: 1 });
     g.control(true);
-    g.ui.objective('Догони её!');
+    g.ui.objective('Догони её! (Shift — бежать)');
     g.debugGoal = () => w.root.position;
-    let ang = Math.atan2(w.root.position.z, w.root.position.x / 1.3);
-    let caught = false;
-    let laughT = 0;
     const R = 8.7;
+    const angOf = (p) => Math.atan2(p.z, p.x / 1.3);
+    let ang = angOf(w.root.position);
+    let dir = 1;               // direction around the pond
+    let dodges = 0, burst = 0, weave = 0, laughT = 0, stamina = 1, reverseCd = 0;
+    const wrap = (x) => Math.atan2(Math.sin(x), Math.cos(x));
+    let caught = false;
     await g.until(() => {
       const dt = g.dt;
-      const d = h.root.position.distanceTo(w.root.position);
-      // she runs away along the path ring; slows down as she starts laughing
-      const flee = d < 6 ? 2.6 : 1.4;
-      ang += (flee / R) * dt;
-      const nx = Math.cos(ang) * R * 1.3, nz = Math.sin(ang) * R;
+      const hp = h.root.position;
+      const d = hp.distanceTo(w.root.position);
+      // the player's breath
+      const running = input.isDown('run') && g.controlEnabled && h.state === 'run';
+      stamina = running ? Math.max(0, stamina - dt * 0.16) : Math.min(1, stamina + dt * 0.2);
+      if (stamina <= 0) g.noRun = true;
+      if (g.noRun && stamina > 0.35) g.noRun = false;
+      g.ui.meter('ДЫХАНИЕ', stamina);
+      // she dodges when he gets close (three times), then she's laughing too hard to run
+      const tired = dodges >= 3;
+      if (!tired && d < 1.8 && burst <= 0) {
+        dodges++; burst = 0.9; weave = (dodges % 2 ? 1.4 : -1.2);
+        audio.laugh();
+        g.ui.subtitle(['Она взвизгнула и увернулась.', 'Она смеётся и снова ускользает.', 'Она уже еле бежит от смеха.'][dodges - 1], 2.5);
+      }
+      burst -= dt;
+      // if he cuts her off from the front, she turns back
+      reverseCd -= dt;
+      const ahead = wrap(angOf(hp) - ang) * dir;
+      if (!tired && reverseCd <= 0 && ahead > 0 && ahead < 0.8 && d < 6) { dir = -dir; reverseCd = 2.5; audio.gasp(); }
+      let speed = tired ? 1.5 : burst > 0 ? 5.0 : d < 7 ? 3.0 : 1.7;
+      ang += dir * (speed / R) * dt;
+      weave += (0 - weave) * Math.min(1, dt * 1.5);
+      const r = R + weave;
+      const nx = Math.cos(ang) * r * 1.3, nz = Math.sin(ang) * r;
       w.root.rotation.y = Math.atan2(nx - w.root.position.x, nz - w.root.position.z);
       w.root.position.set(nx, 0, nz);
       w.state = 'run';
       laughT += dt;
-      if (laughT > 3) { w.setExpression('joy'); }
-      if (laughT > 3 && Math.random() < dt * 0.9) audio.laugh();
+      w.setExpression(laughT > 2.5 ? 'joy' : 'fear');
+      if (tired && Math.random() < dt * 1.2) audio.laugh();
       if (h.state === 'run' || h.state === 'walk') h.setExpression(laughT > 4 ? 'joy' : 'scary');
-      if (d < 1.1) caught = true;
+      if (d < 1.1 && tired) caught = true;
       return caught;
     });
+    g.noRun = false;
+    g.ui.meter(null);
     g.control(false);
     g.debugGoal = null;
     g.ui.objective(null);
@@ -142,7 +167,13 @@ export default {
     audio.laugh();
     await g.ui.say('Она', 'Ты меня так напугал!');
     await embrace(g, h, w);
+    g.letterbox(true);
+    const midP = h.root.position.clone().lerp(w.root.position, 0.5);
+    const aP = Math.atan2(-midP.x, -midP.z); // start on the pond side
+    g.camOrbit(midP, { r0: 2.0, r1: 3.4, h0: 1.5, h1: 2.4, a0: aP, a1: aP + 1.3, look: 1.4, dur: 7 }).catch(() => {});
+    await g.wait(2.5);
     await think(g, 'Тогда эта фраза была просто шуткой.');
+    g.letterbox(false);
     await endMemory(g, 'Воспоминание: «Пруд»');
   },
 };

@@ -5,7 +5,7 @@ import { audio } from '../engine/audio.js';
 import * as B from '../world/build.js';
 import { apartment, hospital } from '../world/places.js';
 import { CHILDREN } from '../config/family.js';
-import { spawnHero, spawnWife, think, chapterStart, endMemory, waitInteract, waitReach, V3, setWorldMood, glitchBurst, embrace } from './common.js';
+import { spawnHero, spawnWife, think, chapterStart, endMemory, waitInteract, waitReach, V3, setWorldMood, glitchBurst, embrace, shout, breakDish } from './common.js';
 
 const WALL_WORDS = ['опять', 'ты никогда', 'я устала', 'а я?', 'не начинай', 'как всегда', 'ты не слышишь'];
 
@@ -112,7 +112,35 @@ export default {
         g.snapCamera();
         await g.fade(0, 1.2);
         g.ui.subtitle('Обиды возвращались.', 3);
-        await g.wait(1.5);
+        await g.wait(1.0);
+        // the old quarrel, again — this time it is him who breaks
+        g.control(false);
+        h2.root.position.set(1.0, 0, 0.5); w2.state = 'idle'; w2.root.position.set(1.4, 0, -1.6);
+        await Promise.all([g.faceTo(h2, w2.root.position, 0.2), g.faceTo(w2, h2.root.position, 0.2)]);
+        g.letterbox(true); g.handheld = 1;
+        g.camera.fov = 44; g.camera.updateProjectionMatrix();
+        g.camSet([-0.6, 1.4, -0.4], [1.2, 1.45, -0.5]);
+        audio.playMusic('anxiety', { fade: 1 });
+        await shout(g, 'Она', w2, 'Мы же договаривались! Опять всё как всегда!', 'f', { anger: 0.8 });
+        g.camSet([2.6, 1.55, -0.9], [1.0, 1.5, 0.5]);
+        await shout(g, 'Ты', h2, 'Да что бы я ни делал — всё не так!', 'm', { anger: 0.9 });
+        g.camSet([0.0, 1.6, 1.6], [1.4, 1.45, -1.6]);
+        await shout(g, 'Она', w2, 'Потому что ты не слышишь!', 'f', { anger: 1 });
+        h2.state = 'attack';
+        g.camSet([0.2, 0.5, -0.5], [1.4, 0.2, 0.2]);
+        await breakDish(g, V3(1.6, 0.85, 0.2), V3(1.5, 0, -0.1), { kind: 'cup', dur: 0.35 });
+        audio.stopMusic(0.2);
+        h2.state = 'idle'; h2.setExpression('sad'); w2.setExpression('cry');
+        await g.wait(1.8);
+        await think(g, 'Я не хотел. Я просто не знал, куда деть всё это.');
+        g.handheld = 0; g.letterbox(false);
+        g.camera.fov = 60; g.camera.updateProjectionMatrix();
+        w2.root.position.set(2.4, 0, -1.3); w2.root.rotation.y = 0; w2.state = 'sit'; w2.setExpression('sad');
+        h2.state = 'tired'; h2.root.position.set(-1, 0, 1.5);
+        audio.playMusic('sparse', { fade: 2 });
+        g.followCamera({ dist: 2.8, height: 1.9, lookH: 1.3 });
+        g.snapCamera();
+        await g.wait(0.5);
       } else {
         await g.ui.say('Она', 'Может… нам стоит пожить отдельно?');
         audio.heartbeat();

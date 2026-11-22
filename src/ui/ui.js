@@ -22,11 +22,18 @@ export class UI {
   /** speaker: string|null. opts: {thought, auto (seconds), speed} */
   say(speaker, text, opts = {}) {
     const g = this.game;
+    if (opts.passive) {
+      // background line: shown as a subtitle, never blocks movement or input
+      const dur = opts.auto ?? Math.max(2.5, text.length * 0.07);
+      this.subtitle(speaker ? `${speaker}: ${text}` : text, dur);
+      return g.wait(dur);
+    }
     const d = this.el.dialogue;
     d.classList.remove('hidden');
     d.querySelector('.speaker').textContent = speaker || '';
     const tx = d.querySelector('.text');
     tx.classList.toggle('thought', !!opts.thought);
+    d.classList.toggle('shout', !!opts.shout);
     tx.textContent = '';
     d.querySelector('.choices').innerHTML = '';
     d.querySelector('.next').style.visibility = 'hidden';

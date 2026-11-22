@@ -121,3 +121,11 @@ body { font-family: var(--font-txt); }
 #fakecrash .win-body { padding: 16px; }
 #fakecrash .win-btns { padding: 0 16px 14px; text-align: right; }
 #fakecrash .btn { display: inline-block; padding: 3px 16px; border: 2px outset #fff; background: #c0c0c0; }
+
+#letterbox { position: absolute; inset: 0; pointer-events: none; }
+#letterbox .bar { position: absolute; left: 0; right: 0; height: 0; background: #000; transition: height 1.2s ease; }
+#letterbox .bar.top { top: 0; }
+#letterbox .bar.bottom { bottom: 0; }
+#letterbox.on .bar { height: 11vh; }
+#dialogue.shout { border-color: #8a3a32; animation: jitter 0.09s infinite; }
+#dialogue.shout .text { color: #f0d0c8; font-weight: bold; }

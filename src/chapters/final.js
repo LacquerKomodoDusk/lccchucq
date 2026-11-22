@@ -180,9 +180,10 @@ export default {
     // everything stops
     const post = g.r.post;
     await g.tween(1.5, (k) => { post.uSat.value = 0.65 * (1 - k * 0.9); globalUniforms.uWarp.value = 0.1 * (1 - k); });
-    await g.wait(1.5);
+    g.letterbox(true);
+    const midF = hero.root.position.clone().lerp(fig.root.position, 0.5);
     g.ui.subtitle('Мир замер.', 3);
-    await g.wait(2.5);
+    await g.camOrbit(midF, { r0: 4.2, r1: 3.0, h0: 1.4, h1: 2.0, a0: 1.6, a1: 2.9, look: 1.5, dur: 5 });
     post.uWhite.value = 0;
     await g.tween(1.2, (k) => { post.uWhite.value = k; });
     g.setFade(1);
@@ -323,8 +324,11 @@ export default {
       if (Math.random() < dt * 8 * (1 - k)) audio.glitch(0.08);
     });
     audio.shatter();
+    g.letterbox(true);
+    g.camOrbit([0, 0, 0.2], { r0: 2.6, r1: 1.8, h0: 1.3, h1: 1.7, a0: 0.9, a1: 0.9 + Math.PI * 1.1, look: 1.5, dur: 6 }).catch(() => {});
     await g.until(() => k >= 1);
     tr();
+    g.shake(0.25, 0.8);
     fig2.root.visible = false;
     wife.root.visible = true;
     wife.setGlitch(0);
@@ -332,17 +336,22 @@ export default {
     wife.setExpression('cry');
     audio.setIntensity(2); // the orchestra comes in
     await g.tween(3, (t) => { post.uSat.value = 0.25 + t * 0.65; post.uTint.value.set(1.0 + t * 0.04, 0.95 + t * 0.03, 1.0 - t * 0.06); });
-    g.camera.fov = 36; g.camera.updateProjectionMatrix();
-    g.camSet([1.0, 1.62, -0.7], [0, 1.5, 0.3]);
-    await g.wait(1.5);
+    // close-ups over each shoulder, slowly pushing in
+    g.camera.fov = 34; g.camera.updateProjectionMatrix();
+    g.camSet([0.75, 1.64, 1.35], [0, 1.5, 0.0]);
+    g.handheld = 0.35;
+    g.pushIn(0.35, 4).catch(() => {});
+    await g.wait(1.2);
     await g.ui.say('Она', STORY.wifeFinal);
-    g.camSet([-0.9, 1.72, 1.2], [0, 1.55, 0.25]);
+    g.camSet([-0.55, 1.7, -0.85], [0, 1.58, 0.42]);
+    g.pushIn(0.3, 4).catch(() => {});
     h3.setExpression('sad');
     await g.ui.say('Ты', STORY.heroFinal);
     h3.setExpression('closed'); wife.setExpression('closed');
-    g.camera.fov = 50; g.camera.updateProjectionMatrix();
-    g.camSet([2.6, 1.9, 2.2], [0, 1.3, 0.2]);
-    await g.wait(4.5);
+    // the silent embrace: the camera slowly pulls back and rises
+    g.handheld = 0;
+    g.camera.fov = 45; g.camera.updateProjectionMatrix();
+    await g.camOrbit([0, 0, 0.2], { r0: 1.6, r1: 4.2, h0: 1.5, h1: 3.0, a0: 2.2, a1: 3.4, look: 1.35, dur: 6 });
 
     /* -------------------- the nightmare falls apart -------------------- */
     audio.shatter();
@@ -408,12 +417,12 @@ export default {
     // she walks beside him
     const beside = g.onUpdate((dt) => {
       const yaw = hR.root.rotation.y;
-      const right = new THREE.Vector3(-Math.cos(yaw), 0, Math.sin(yaw));
-      const want = hR.root.position.clone().addScaledVector(right, -0.8);
+      // she keeps to his right along the road and matches his pace
+      const want = hR.root.position.clone().add(new THREE.Vector3(0.8, 0, 0.1));
       const p = wR.root.position;
       const d = Math.hypot(want.x - p.x, want.z - p.z);
       if (d > 0.15) {
-        const s = Math.min(d, dt * Math.min(2.0, d * 2.2));
+        const s = Math.min(d, dt * Math.min(2.4, d * 4));
         p.x += (want.x - p.x) / d * s; p.z += (want.z - p.z) / d * s;
         wR.root.rotation.y = lerpAngle(wR.root.rotation.y, Math.atan2(want.x - p.x, want.z - p.z), Math.min(1, dt * 5));
         wR.state = 'walk';

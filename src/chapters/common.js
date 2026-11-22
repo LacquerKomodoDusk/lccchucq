@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { audio } from '../engine/audio.js';
-import { globalUniforms } from '../engine/ps1.js';
+import { globalUniforms, ps1Material as ps1Mat } from '../engine/ps1.js';
 import { heroSpec, wifeSpec } from '../config/family.js';
 
 export const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -93,4 +93,69 @@ export async function embrace(g, a, b, dist = 0.42) {
   a.root.rotation.y = Math.atan2(dir.x, dir.z);
   b.root.rotation.y = a.root.rotation.y + Math.PI;
   a.state = 'hug'; b.state = 'hug';
+}
+
+/* ------------------------------------------------------------------ quarrels */
+
+const GRAV = 9.8;
+
+/**
+ * A dish flies / falls from `from` to the floor near `to` and smashes into shards
+ * that stay on the floor. Resolves on impact.
+ */
+export function breakDish(g, from, to, { kind = 'plate', dur = 0.5 } = {}) {
+  const dish = new THREE.Group();
+  const white = ps1Mat({ color: '#e8e4da' });
+  if (kind === 'plate') {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.1, 0.025, 10), white); dish.add(m);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.008, 3, 10), ps1Mat({ color: '#3a5a8a' })); rim.rotation.x = Math.PI / 2; rim.position.y = 0.012; dish.add(rim);
+  } else {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.038, 0.1, 8), white); dish.add(m);
+    const h = new THREE.Mesh(new THREE.TorusGeometry(0.025, 0.006, 3, 6), white); h.position.x = 0.05; h.rotation.y = Math.PI / 2; dish.add(h);
+  }
+  const a = from.clone(), b = to.clone().setY(0.02);
+  dish.position.copy(a);
+  g.add(dish);
+  const up = 1.2;
+  return g.tween(dur, (k) => {
+    dish.position.lerpVectors(a, b, k);
+    dish.position.y = a.y + (b.y - a.y) * k + up * 4 * k * (1 - k) * 0.25;
+    dish.rotation.x = k * 6; dish.rotation.z = k * 3;
+  }, (k) => k * k * 0.6 + k * 0.4).then(() => {
+    g.scene.remove(dish);
+    audio.plateBreak();
+    g.shake(0.14, 0.5);
+    const shards = [];
+    for (let i = 0; i < 13; i++) {
+      const geo = new THREE.TetrahedronGeometry(0.03 + Math.random() * 0.04, 0); geo.scale(1, 0.3, 1);
+      const m = new THREE.Mesh(geo, i % 4 === 0 && kind === 'plate' ? ps1Mat({ color: '#3a5a8a' }) : white);
+      m.position.copy(b).setY(0.03);
+      const ang = Math.random() * Math.PI * 2, sp = 0.8 + Math.random() * 2.2;
+      m.userData.v = new THREE.Vector3(Math.cos(ang) * sp, 1 + Math.random() * 1.8, Math.sin(ang) * sp);
+      m.userData.r = new THREE.Vector3(Math.random() * 10, Math.random() * 10, Math.random() * 10);
+      g.add(m); shards.push(m);
+    }
+    const off = g.onUpdate((dt) => {
+      let moving = 0;
+      for (const m of shards) {
+        const v = m.userData.v;
+        if (v.lengthSq() < 0.0004) continue;
+        moving++;
+        v.y -= GRAV * dt;
+        m.position.addScaledVector(v, dt);
+        m.rotation.x += m.userData.r.x * dt; m.rotation.z += m.userData.r.z * dt;
+        if (m.position.y < 0.015) { m.position.y = 0.015; v.y = -v.y * 0.3; v.x *= 0.55; v.z *= 0.55; m.userData.r.multiplyScalar(0.5); }
+      }
+      if (!moving) off();
+    });
+  });
+}
+
+/** One shouted line: unintelligible raised voice + the words on screen + a little shake. */
+export async function shout(g, speaker, c, text, gender, { anger = 0.8 } = {}) {
+  if (c) { c.state = 'argue'; c.setExpression('angry'); }
+  const dur = Math.max(1.0, Math.min(2.4, text.length * 0.055));
+  audio.voice(gender, dur, anger);
+  g.shake(0.05 + anger * 0.05, 0.4);
+  await g.ui.say(speaker, text, { shout: true, auto: dur + 0.5, speed: 70, silent: true });
 }

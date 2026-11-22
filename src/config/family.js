@@ -38,19 +38,19 @@ export const WIFE_BASE = {
 // Наряды по воспоминаниям (меняется только одежда, не внешность).
 export const OUTFITS = {
   hero: {
-    trench: { coat: '#b59e78', longCoat: true, coatLength: 0.55, belt: '#8e7a58', backpack: '#5a6070', top: '#2c3650' }, // автобус: бежевый тренч + серый рюкзак
-    everyday: { top: '#4a4458', pants: '#30333a' },     // повседневная жизнь: свитер
-    home: { top: '#9aa3b0', pants: '#33363e' },         // дома: светлая футболка
+    trench: { buttons: '#5a4630', coat: '#b59e78', longCoat: true, coatLength: 0.55, belt: '#8e7a58', backpack: '#5a6070', top: '#2c3650' }, // автобус: бежевый тренч + серый рюкзак
+    everyday: { top: '#4a4458', pants: '#30333a', topKind: 'sweater' },     // повседневная жизнь: свитер
+    home: { top: '#9aa3b0', pants: '#33363e', topKind: 'tshirt' },         // дома: светлая футболка
     tired: { coat: '#3f3d33', longCoat: false, scarf: '#c8b89a', top: '#2a2a2e' }, // поздний период: куртка с воротником
     work: { top: '#4a4458', pants: '#30333a' },
     rain: { coat: '#3f3d33', longCoat: true, coatLength: 0.35, scarf: '#c8b89a', top: '#2a2a2e' },
   },
   wife: {
-    busCoat: { coat: '#1c1a1d', longCoat: true, coatLength: 0.62, belt: '#121012', hat: 'beanie', hatColor: '#b3382c' }, // чёрное пальто + красная шапка
+    busCoat: { buttons: '#5a5a5e', coat: '#1c1a1d', longCoat: true, coatLength: 0.62, belt: '#121012', hat: 'beanie', hatColor: '#b3382c' }, // чёрное пальто + красная шапка
     date: { coat: '#1c1a1d', longCoat: true, coatLength: 0.55, belt: '#121012' },
     home: { top: '#5a2a2e', pants: '#2a2a30' },
     summer: { top: '#8a5a5a', pants: '#3a3a44' },
-    rain: { coat: '#1c1a1d', longCoat: true, coatLength: 0.62, belt: '#121012', hat: 'beanie', hatColor: '#b3382c' },
+    rain: { buttons: '#5a5a5e', coat: '#1c1a1d', longCoat: true, coatLength: 0.62, belt: '#121012', hat: 'beanie', hatColor: '#b3382c' },
   },
 };
 

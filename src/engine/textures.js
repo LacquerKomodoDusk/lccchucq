@@ -62,8 +62,14 @@ export function asphaltTex(repeat = [1, 1], wet = false) {
       g.fillStyle = `rgb(${v},${v + 2},${v + 6})`;
       g.fillRect(x, y, 1, 1);
     }
+    // a darker repair patch and a few cracks
+    g.fillStyle = wet ? 'rgba(10,10,14,0.35)' : 'rgba(20,20,24,0.3)'; g.fillRect(18, 4, 9, 7);
+    g.fillStyle = 'rgba(15,15,18,0.7)';
+    for (let c = 0; c < 2; c++) { let x = Math.floor(r() * 32), y = Math.floor(r() * 32); for (let i = 0; i < 12; i++) { g.fillRect(x & 31, y & 31, 1, 1); x += Math.floor(r() * 3) - 1; y += 1; } }
+    for (let i = 0; i < 10; i++) { const v = 90 + r() * 40; g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(Math.floor(r() * 32), Math.floor(r() * 32), 1, 1); }
     if (wet) {
       for (let i = 0; i < 6; i++) { g.fillStyle = 'rgba(120,130,150,0.25)'; g.fillRect(Math.floor(r() * 28), Math.floor(r() * 30), 4 + Math.floor(r() * 5), 1); }
+      g.fillStyle = 'rgba(140,150,170,0.18)'; g.fillRect(4, 20, 10, 4); g.fillRect(6, 19, 6, 1);
     }
   }, { repeat, key: 'asphalt' + wet });
 }
@@ -111,6 +117,9 @@ export function wallpaperTex(repeat = [1, 1], base = '#7d7360', pattern = '#6a60
     g.fillStyle = pattern;
     for (let y = 2; y < 32; y += 8) for (let x = (y / 8) % 2 ? 4 : 0; x < 32; x += 8) { g.fillRect(x + 2, y, 2, 2); g.fillRect(x + 1, y + 1, 4, 1); g.fillRect(x + 3, y - 1, 0.5, 3); }
     g.fillRect(0, 0, 1, 32); g.fillRect(16, 0, 1, 32);
+    for (let y = 26; y < 32; y++) { g.fillStyle = `rgba(30,22,14,${(y - 25) * 0.035})`; g.fillRect(0, y, 32, 1); }
+    g.fillStyle = 'rgba(255,255,240,0.08)'; g.fillRect(0, 0, 32, 1);
+    for (let i = 0; i < 5; i++) { g.fillStyle = 'rgba(40,30,20,0.12)'; g.fillRect(Math.floor(r() * 30), 20 + Math.floor(r() * 10), 1 + Math.floor(r() * 2), 1); }
   }, { repeat, key: `wp-${base}-${pattern}` });
 }
 
@@ -128,10 +137,17 @@ export function windowsTex(repeat = [1, 1], lit = 0.4, base = '#3a3d44', seed = 
   return canvasTexture(32, 32, (g) => {
     const r = rng(seed);
     g.fillStyle = base; g.fillRect(0, 0, 32, 32);
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) if (r() < 0.25) { g.fillStyle = 'rgba(0,0,0,0.08)'; g.fillRect(x, y, 1, 1); }
+    g.fillStyle = 'rgba(0,0,0,0.25)'; for (let y = 0; y < 32; y += 8) g.fillRect(0, y, 32, 1); // panel seams
+    for (let x = 0; x < 32; x += 16) g.fillRect(x, 0, 1, 32);
     for (let y = 2; y < 32; y += 8) for (let x = 2; x < 32; x += 8) {
       const on = r() < lit;
+      g.fillStyle = '#8a8a84'; g.fillRect(x - 1, y - 1, 6, 7); // frame
       g.fillStyle = on ? (r() < 0.5 ? '#d9b45a' : '#c9a06a') : '#1c1e24';
       g.fillRect(x, y, 4, 5);
+      g.fillStyle = on ? 'rgba(90,60,20,0.5)' : 'rgba(255,255,255,0.06)'; g.fillRect(x + 2, y, 1, 5); // mullion
+      if (on && r() < 0.5) { g.fillStyle = 'rgba(120,40,30,0.45)'; g.fillRect(x, y, 1, 5); } // a curtain
+      g.fillStyle = '#b0aca4'; g.fillRect(x - 1, y + 5, 6, 1); // sill
     }
   }, { repeat, key: `win-${lit}-${base}-${seed}` });
 }
@@ -233,4 +249,42 @@ export function seatTex(repeat = [1, 1]) {
       g.fillStyle = '#b8783a'; g.fillRect(x + 1, y + 1, 1, 1);
     }
   }, { repeat, key: 'seat' });
+}
+
+/** printed toy box: bright cardboard, a white band and a simple pictogram */
+export function toyBoxTex(base = '#c84a3a', icon = 0) {
+  return canvasTexture(16, 16, (g) => {
+    const r = rng(81 + icon);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { g.fillStyle = shade(base, 0.9 + r() * 0.15); g.fillRect(x, y, 1, 1); }
+    g.fillStyle = '#f0ece0'; g.fillRect(0, 11, 16, 3);
+    g.fillStyle = '#2a2a2a'; g.fillRect(2, 12, 8, 1);
+    g.fillStyle = '#ffffff';
+    if (icon % 4 === 0) { g.fillRect(5, 3, 6, 5); g.fillRect(4, 2, 2, 2); g.fillRect(10, 2, 2, 2); g.fillStyle = '#2a2a2a'; g.fillRect(6, 5, 1, 1); g.fillRect(9, 5, 1, 1); } // bear
+    else if (icon % 4 === 1) { g.fillRect(3, 4, 10, 3); g.fillRect(5, 2, 5, 2); g.fillStyle = '#2a2a2a'; g.fillRect(4, 7, 2, 2); g.fillRect(10, 7, 2, 2); } // car
+    else if (icon % 4 === 2) { g.fillRect(5, 2, 6, 6); g.fillRect(4, 3, 8, 4); g.fillStyle = base; g.fillRect(7, 2, 2, 6); } // ball
+    else { g.fillRect(4, 2, 8, 2); g.fillRect(4, 5, 8, 2); g.fillRect(4, 8, 8, 1); } // blocks
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, 0, 16, 1); g.fillRect(0, 0, 1, 16);
+  }, { key: `toybox-${base}-${icon}` });
+}
+
+/** corrugated metal wall */
+export function corrugatedTex(repeat = [1, 1], base = '#5a6066') {
+  return canvasTexture(16, 16, (g) => {
+    const r = rng(91);
+    for (let x = 0; x < 16; x++) {
+      const k = x % 4 === 0 ? 0.7 : x % 4 === 1 ? 1.1 : 0.95;
+      for (let y = 0; y < 16; y++) { g.fillStyle = shade(base, k * (0.94 + r() * 0.1)); g.fillRect(x, y, 1, 1); }
+    }
+    g.fillStyle = 'rgba(90,60,30,0.25)'; g.fillRect(Math.floor(r() * 12), 12, 3, 4);
+  }, { repeat, key: `corr-${base}` });
+}
+
+/** warehouse floor: concrete with a yellow safety line along one edge */
+export function warehouseFloorTex(repeat = [1, 1]) {
+  return canvasTexture(32, 32, (g) => {
+    const r = rng(95);
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) { g.fillStyle = shade('#5a5a56', 0.86 + r() * 0.2); g.fillRect(x, y, 1, 1); }
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, 0, 32, 1); g.fillRect(0, 0, 1, 32);
+    for (let i = 0; i < 4; i++) { g.fillStyle = 'rgba(30,25,20,0.2)'; g.fillRect(Math.floor(r() * 26), Math.floor(r() * 26), 6, 3); }
+  }, { repeat, key: 'whfloor' });
 }

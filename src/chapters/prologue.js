@@ -43,8 +43,9 @@ export default {
     g.control(false);
     g.ui.objective(null);
     await g.fade(1, 1.2);
-    hero.root.position.set(-1.2, 0.55, -0.4);
-    hero.root.rotation.y = Math.PI;
+    // on his back, head on the pillow (pillows are at the -z end of the bed)
+    hero.root.position.set(-1.2, 0.5, -0.85);
+    hero.root.rotation.y = 0;
     hero.state = 'lie';
     hero.setExpression('closed');
     g.camSet([0.6, 1.9, 1.2], [-1.2, 0.6, -0.8]);

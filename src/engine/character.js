@@ -11,65 +11,158 @@ function px(g, x, y, w, h, c) { g.fillStyle = c; g.fillRect(x, y, w, h); }
  * Draw a 32x32 face.
  * spec: { skin, hair, brow, eye, lip, beard (color|null), noseRing, kid }
  */
+function mix(c1, c2, k) {
+  const a = new THREE.Color(c1), b = new THREE.Color(c2);
+  return '#' + a.lerp(b, k).getHexString();
+}
+
+/**
+ * 64x64 pixel-art face.
+ * spec: { skin, skinDark, hair, brow, eye, lip, lash, beard, beardDark, noseRing, thickBrows, lashes, hairline, fringe }
+ */
 export function faceTexture(spec, expr = 'neutral') {
-  return canvasTexture(32, 32, (g) => {
+  return canvasTexture(64, 64, (g) => {
     const s = spec;
-    px(g, 0, 0, 32, 32, s.skin);
-    // subtle shading
-    px(g, 0, 0, 3, 32, s.skinDark); px(g, 29, 0, 3, 32, s.skinDark);
-    // hairline
-    if (s.hairline) { px(g, 0, 0, 32, s.hairline, s.hair); }
-    if (s.fringe) { px(g, 0, 0, 32, 6, s.hair); px(g, 0, 6, 6, 4, s.hair); px(g, 26, 6, 6, 4, s.hair); }
-    const eyeY = 13;
+    const sk = s.skin, skD = s.skinDark, skL = mix(s.skin, '#ffffff', 0.12), skW = mix(s.skin, '#d0705a', 0.18);
+    // base + soft shading: lighter forehead & nose bridge, warm cheeks, darker sides/jaw
+    px(g, 0, 0, 64, 64, sk);
+    px(g, 0, 0, 5, 64, skD); px(g, 59, 0, 5, 64, skD);
+    px(g, 5, 0, 3, 64, mix(sk, skD, 0.5)); px(g, 56, 0, 3, 64, mix(sk, skD, 0.5));
+    px(g, 16, 6, 32, 10, skL);
+    px(g, 10, 36, 8, 6, skW); px(g, 46, 36, 8, 6, skW);
+    px(g, 8, 56, 48, 8, mix(sk, skD, 0.45));
+    // hairline / fringe
+    if (s.hairline) px(g, 0, 0, 64, s.hairline * 2, s.hair);
+    if (s.fringe) { px(g, 0, 0, 64, 12, s.hair); px(g, 0, 12, 12, 8, s.hair); px(g, 52, 12, 12, 8, s.hair); }
+    const eyeY = 26;
     const closed = expr === 'closed';
     // brows
-    const browY = expr === 'fear' || expr === 'sad' ? eyeY - 4 : eyeY - 3;
-    const bw = s.thickBrows ? 2 : 1;
-    if (expr === 'sad' || expr === 'cry' || expr === 'fear') {
-      px(g, 7, browY + 1, 3, bw, s.brow); px(g, 10, browY, 3, bw, s.brow);
-      px(g, 19, browY, 3, bw, s.brow); px(g, 22, browY + 1, 3, bw, s.brow);
-    } else if (expr === 'scary' || expr === 'angry') {
-      px(g, 7, browY - 1, 3, bw, s.brow); px(g, 10, browY + 1, 3, bw, s.brow);
-      px(g, 19, browY + 1, 3, bw, s.brow); px(g, 22, browY - 1, 3, bw, s.brow);
-    } else {
-      px(g, 7, browY, 6, bw, s.brow); px(g, 19, browY, 6, bw, s.brow);
+    const bw = s.thickBrows ? 3 : 2;
+    const sad = expr === 'sad' || expr === 'cry' || expr === 'fear';
+    const angry = expr === 'scary' || expr === 'angry';
+    const browY = eyeY - (sad ? 8 : 6);
+    for (let i = 0; i < 12; i++) {
+      // left brow x 12..23, right brow x 40..51 (mirrored)
+      let dy = 0;
+      if (sad) dy = Math.round((11 - i) / 5);           // inner ends up
+      else if (angry) dy = -Math.round((11 - i) / 4);   // inner ends down
+      else dy = s.lashes ? (i > 3 && i < 9 ? -1 : 0) : 0; // soft arch
+      px(g, 12 + i, browY + dy * (angry ? -1 : 1) + (angry ? 2 : 0), 1, bw, s.brow);
+      px(g, 51 - i, browY + dy * (angry ? -1 : 1) + (angry ? 2 : 0), 1, bw, s.brow);
     }
     // eyes
-    if (closed) {
-      px(g, 8, eyeY + 1, 4, 1, s.lash); px(g, 20, eyeY + 1, 4, 1, s.lash);
-    } else {
-      const ew = expr === 'fear' || expr === 'scary' ? 3 : 2;
-      px(g, 8, eyeY, 4, ew, '#e9e4dc'); px(g, 20, eyeY, 4, ew, '#e9e4dc');
-      px(g, 9, eyeY, 2, ew, s.eye); px(g, 21, eyeY, 2, ew, s.eye);
-      px(g, 8, eyeY - 1, 4, 1, s.lash); px(g, 20, eyeY - 1, 4, 1, s.lash);
-      if (s.lashes) { px(g, 7, eyeY - 1, 1, 1, s.lash); px(g, 24, eyeY - 1, 1, 1, s.lash); }
-    }
-    if (expr === 'cry') { px(g, 9, eyeY + 2, 1, 5, '#9fc4e0'); px(g, 22, eyeY + 2, 1, 6, '#9fc4e0'); }
-    // nose
-    px(g, 15, eyeY + 1, 2, 5, s.skinDark);
-    px(g, 14, eyeY + 6, 4, 1, s.skinDark);
-    if (s.noseRing) px(g, 15, eyeY + 7, 2, 1, '#e8e0c0');
-    // mouth
-    const my = 24;
+    const lash = s.lash;
+    const eye = (x) => {
+      if (closed) { px(g, x, eyeY + 2, 10, 1, lash); px(g, x + 1, eyeY + 3, 8, 1, mix(sk, skD, 0.6)); return; }
+      const h = expr === 'fear' || expr === 'scary' ? 6 : expr === 'joy' || expr === 'smile' ? 3 : 4;
+      px(g, x, eyeY, 10, h, '#ece6dc');
+      px(g, x + 3, eyeY, 4, h, s.eye);
+      px(g, x + 4, eyeY + Math.max(0, h - 3), 2, Math.min(2, h), '#0c0a0a');
+      px(g, x + 3, eyeY, 1, 1, '#ffffff');
+      px(g, x - 1, eyeY - 1, 12, 1, lash); // upper lid
+      px(g, x, eyeY + h, 10, 1, mix(sk, skD, 0.7)); // lower lid shadow
+      if (s.lashes) { px(g, x - 2, eyeY - 2, 2, 1, lash); px(g, x + 10, eyeY - 2, 2, 1, lash); }
+    };
+    eye(14); eye(40);
+    if (expr === 'cry') { px(g, 17, eyeY + 5, 1, 10, '#a8cce6'); px(g, 45, eyeY + 5, 1, 12, '#a8cce6'); px(g, 18, eyeY + 14, 1, 2, '#c8e0f0'); }
+    // nose: bridge shadow, tip highlight, nostrils
+    px(g, 29, eyeY + 1, 1, 12, mix(sk, skD, 0.6));
+    px(g, 31, eyeY + 4, 2, 9, skL);
+    px(g, 27, eyeY + 13, 10, 2, mix(sk, skD, 0.55));
+    px(g, 28, eyeY + 14, 2, 1, '#5a3a30'); px(g, 34, eyeY + 14, 2, 1, '#5a3a30');
+    if (s.noseRing) { px(g, 30, eyeY + 16, 4, 1, '#efe6c4'); px(g, 29, eyeY + 15, 1, 1, '#cfc6a4'); px(g, 34, eyeY + 15, 1, 1, '#cfc6a4'); }
+    // beard & moustache (strand texture)
     if (s.beard) {
-      // full beard + moustache
-      px(g, 4, 19, 24, 13, s.beard);
-      px(g, 2, 14, 3, 18, s.beard); px(g, 27, 14, 3, 18, s.beard);
-      for (let i = 0; i < 18; i++) px(g, 4 + ((i * 7) % 24), 20 + ((i * 5) % 11), 1, 1, s.beardDark);
-      px(g, 11, 21, 10, 2, s.beardDark); // moustache
+      const bd = s.beard, bdD = s.beardDark;
+      px(g, 6, 40, 52, 24, bd);
+      px(g, 3, 28, 6, 36, bd); px(g, 55, 28, 6, 36, bd);
+      px(g, 9, 36, 6, 6, bd); px(g, 49, 36, 6, 6, bd);
+      for (let i = 0; i < 90; i++) {
+        const x = 4 + ((i * 37) % 56), y = 30 + ((i * 23) % 34);
+        if (y < 40 && x > 12 && x < 52) continue;
+        px(g, x, y, 1, 2 + (i % 3), bdD);
+      }
+      px(g, 20, 43, 24, 4, bdD); px(g, 18, 45, 4, 3, bdD); px(g, 42, 45, 4, 3, bdD); // moustache
     }
-    const lip = s.lip;
+    // mouth
+    const lip = s.lip, lipD = mix(s.lip, '#2a1010', 0.4), lipL = mix(s.lip, '#ffffff', 0.15);
+    const my = 49;
     if (expr === 'smile' || expr === 'joy') {
-      px(g, 12, my, 8, 1, lip); px(g, 11, my - 1, 1, 1, lip); px(g, 20, my - 1, 1, 1, lip);
+      px(g, 24, my, 16, 2, lipD); px(g, 22, my - 1, 2, 1, lipD); px(g, 40, my - 1, 2, 1, lipD);
+      px(g, 25, my + 2, 14, 2, lipL);
+      if (expr === 'joy') px(g, 26, my, 12, 1, '#f0ece4');
+    } else if (expr === 'angry') {
+      px(g, 24, my - 2, 16, 5, '#2a1414'); px(g, 25, my - 2, 14, 1, '#e8e4dc'); px(g, 24, my - 3, 16, 1, lip);
     } else if (expr === 'fear' || expr === 'scary') {
-      px(g, 13, my - 1, 6, 3, '#2a1414');
-      if (expr === 'scary') { px(g, 13, my - 1, 1, 1, '#ddd'); px(g, 18, my - 1, 1, 1, '#ddd'); }
-    } else if (expr === 'sad' || expr === 'cry') {
-      px(g, 12, my, 8, 1, lip); px(g, 11, my + 1, 1, 1, lip); px(g, 20, my + 1, 1, 1, lip);
+      px(g, 26, my - 2, 12, 6, '#2a1414');
+      if (expr === 'scary') { px(g, 26, my - 2, 2, 2, '#e0dcd4'); px(g, 36, my - 2, 2, 2, '#e0dcd4'); }
+    } else if (sad) {
+      px(g, 24, my, 16, 2, lipD); px(g, 22, my + 2, 2, 1, lipD); px(g, 40, my + 2, 2, 1, lipD); px(g, 26, my + 2, 12, 1, lipL);
     } else {
-      px(g, 12, my, 8, 1, lip);
+      px(g, 24, my, 16, 2, lipD); px(g, 25, my + 2, 14, 2, lip); px(g, 27, my + 4, 10, 1, lipL);
     }
-  }, { key: `face-${JSON.stringify(spec)}-${expr}` });
+    // chin shadow
+    if (!s.beard) px(g, 24, 58, 16, 2, mix(sk, skD, 0.5));
+  }, { key: `face64-${JSON.stringify(spec)}-${expr}` });
+}
+
+/** clothing front: coat with lapels & buttons, jacket with zip, sweater, t-shirt */
+export function clothFrontTex(base, kind = 'coat', accent = '#2a2a2a') {
+  return canvasTexture(32, 32, (g) => {
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+      const k = ((x + y) % 2 ? 0.95 : 1.02) * (0.94 + ((x * 7 + y * 13) % 11) / 100);
+      px(g, x, y, 1, 1, mix(base, '#000000', 1 - k));
+    }
+    const dark = mix(base, '#000000', 0.35), light = mix(base, '#ffffff', 0.12);
+    if (kind === 'coat') {
+      // lapels (V), double row of buttons, pockets, seam
+      for (let i = 0; i < 12; i++) { px(g, 9 + i * 0.5, i, 2, 1, dark); px(g, 21 - i * 0.5, i, 2, 1, dark); px(g, 11 + i * 0.5, i, 1, 1, light); }
+      for (const y of [14, 20, 26]) { px(g, 12, y, 2, 2, accent); px(g, 18, y, 2, 2, accent); }
+      px(g, 16, 12, 1, 20, dark);
+      px(g, 3, 22, 7, 1, dark); px(g, 22, 22, 7, 1, dark);
+    } else if (kind === 'jacket') {
+      px(g, 15, 0, 2, 32, '#8a8a80'); px(g, 15, 4, 2, 1, '#c8c8c0');
+      px(g, 3, 20, 7, 1, dark); px(g, 22, 20, 7, 1, dark);
+      px(g, 0, 29, 32, 3, dark);
+    } else if (kind === 'sweater') {
+      px(g, 10, 0, 12, 3, dark); // neckline
+      for (let y = 26; y < 32; y += 2) px(g, 0, y, 32, 1, dark); // ribbed hem
+    } else if (kind === 'tshirt') {
+      px(g, 11, 0, 10, 2, dark);
+    }
+  }, { key: `cloth-${base}-${kind}-${accent}` });
+}
+
+/** jeans / trousers with seams */
+export function trousersTex(base) {
+  return canvasTexture(16, 32, (g) => {
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 16; x++) {
+      const k = 0.9 + ((x * 5 + y * 3) % 7) / 50 + (y > 10 && y < 16 ? 0.05 : 0);
+      px(g, x, y, 1, 1, mix(base, '#000000', 1 - k));
+    }
+    px(g, 0, 0, 1, 32, mix(base, '#000000', 0.35));
+    px(g, 15, 0, 1, 32, mix(base, '#ffffff', 0.1));
+    for (let y = 1; y < 32; y += 3) px(g, 1, y, 1, 1, mix(base, '#d8b070', 0.35)); // stitching
+  }, { key: `trousers-${base}` });
+}
+
+/** shoe: leather with a light sole */
+export function shoeTex(base) {
+  return canvasTexture(8, 8, (g) => {
+    px(g, 0, 0, 8, 8, base);
+    px(g, 0, 0, 8, 2, mix(base, '#ffffff', 0.12));
+    px(g, 0, 6, 8, 2, mix(base, '#c8b8a0', 0.55));
+    px(g, 3, 2, 2, 2, mix(base, '#000000', 0.3));
+  }, { key: `shoe-${base}` });
+}
+
+/** hands: skin with finger separation */
+export function handTex(skin, skinDark) {
+  return canvasTexture(8, 8, (g) => {
+    px(g, 0, 0, 8, 8, skin);
+    for (const x of [2, 4, 6]) px(g, x, 4, 1, 4, skinDark);
+    px(g, 0, 0, 8, 1, mix(skin, skinDark, 0.5));
+  }, { key: `hand-${skin}` });
 }
 
 /* ---------------------------------------------------------------- geometry helpers */
@@ -111,19 +204,33 @@ function poseFor(state, t, ch) {
   switch (state) {
     case 'idle':
       p.torsoX = br; p.headX = -br; p.uArmLZ = 0.1 + br; p.uArmRZ = -0.1 - br; p.fArmLX = -0.12; p.fArmRX = -0.12;
+      // slow weight shift from foot to foot
+      p.hipsY = Math.sin(t * 0.37) * 0.035; p.torsoZ = Math.sin(t * 0.37 + 0.6) * 0.018;
+      p.thighLX = Math.max(0, Math.sin(t * 0.37)) * 0.05; p.shinLX = p.thighLX * 1.4;
+      p.headY = Math.sin(t * 0.23) * 0.08;
       break;
     case 'walk':
     case 'run': {
       const run = state === 'run';
       const ph = ch.phase;
-      const a = run ? 0.85 : 0.5;
-      p.thighLX = Math.sin(ph) * a; p.thighRX = -Math.sin(ph) * a;
-      p.shinLX = Math.max(0, -Math.cos(ph)) * a * 1.3; p.shinRX = Math.max(0, Math.cos(ph)) * a * 1.3;
-      p.uArmLX = -Math.sin(ph) * a * 0.8; p.uArmRX = Math.sin(ph) * a * 0.8;
-      p.fArmLX = run ? -1.2 : -0.25; p.fArmRX = run ? -1.2 : -0.25;
-      p.bob = Math.abs(Math.sin(ph)) * (run ? 0.06 : 0.025);
-      p.torsoX = run ? 0.22 : 0.04; p.headX = run ? -0.12 : 0;
-      p.hipsY = Math.sin(ph) * 0.06;
+      // stride amplitude follows the real speed, so slow steps look slow
+      const sp = Math.min(1.25, (ch.speedNow ?? (run ? 3.7 : 1.75)) / (run ? 3.7 : 1.75));
+      const a = (run ? 0.8 : 0.48) * (0.45 + 0.55 * sp);
+      const s1 = Math.sin(ph), c1 = Math.cos(ph);
+      p.thighLX = s1 * a; p.thighRX = -s1 * a;
+      // knee bends during the swing phase, a little at heel strike
+      p.shinLX = (Math.max(0, -c1) * 1.25 + 0.08) * a * (run ? 1.6 : 1.2);
+      p.shinRX = (Math.max(0, c1) * 1.25 + 0.08) * a * (run ? 1.6 : 1.2);
+      // arms swing opposite to the legs, elbows bend more on the forward swing
+      p.uArmLX = -s1 * a * 0.85; p.uArmRX = s1 * a * 0.85;
+      p.uArmLZ = 0.1; p.uArmRZ = -0.1;
+      p.fArmLX = run ? -1.25 : -0.22 - Math.max(0, s1) * 0.35; p.fArmRX = run ? -1.25 : -0.22 - Math.max(0, -s1) * 0.35;
+      // body: double-frequency bob, hip roll, shoulders counter-rotate, head stays level
+      p.bob = (Math.abs(s1) - 0.5) * (run ? 0.07 : 0.03);
+      p.torsoX = (run ? 0.2 : 0.04) * (0.6 + 0.4 * sp);
+      p.headX = run ? -0.1 : -0.01;
+      p.hipsY = s1 * (run ? 0.09 : 0.07);
+      p.torsoZ = c1 * (run ? 0.02 : 0.015);
       break;
     }
     case 'fear':
@@ -151,7 +258,7 @@ function poseFor(state, t, ch) {
       p.uArmLY = 0.4; p.uArmRY = -0.4;
       break;
     case 'sit':
-      p.sitDrop = 0.45; p.thighLX = -1.5; p.thighRX = -1.5; p.shinLX = 1.5; p.shinRX = 1.5;
+      p.sitDrop = 0.45; p.thighLX = 1.5; p.thighRX = 1.5; p.shinLX = 1.5; p.shinRX = 1.5;
       p.uArmLX = -0.5; p.uArmRX = -0.5; p.fArmLX = -0.6; p.fArmRX = -0.6; p.torsoX = br;
       break;
     case 'scary':
@@ -171,6 +278,20 @@ function poseFor(state, t, ch) {
     case 'kiss':
       p.torsoX = 0.18; p.headX = 0.2; p.headZ = 0.22; p.uArmLX = -0.6; p.uArmRX = -0.6; p.uArmLZ = -0.3; p.uArmRZ = 0.3; p.fArmLX = -0.6; p.fArmRX = -0.6;
       break;
+    case 'sitKiss':
+      p.sitDrop = 0.45; p.thighLX = 1.5; p.thighRX = 1.5; p.shinLX = 1.5; p.shinRX = 1.5;
+      p.torsoX = 0.34; p.headX = 0.1; p.headZ = 0.2 * (ch.kissSide ?? 1);
+      p.uArmLX = -0.7; p.uArmRX = -0.5; p.uArmLZ = -0.2; p.uArmRZ = 0.2; p.fArmLX = -0.7; p.fArmRX = -0.6;
+      break;
+    case 'argue': {
+      // raised voice: leaning in, sharp hand gestures
+      const gst = Math.sin(t * 5.5);
+      p.torsoX = 0.14 + gst * 0.03; p.headX = -0.08 + Math.sin(t * 7) * 0.05; p.headY = Math.sin(t * 2.1) * 0.12;
+      p.uArmRX = -0.9 - Math.max(0, gst) * 0.5; p.uArmRZ = 0.15; p.fArmRX = -1.1 + gst * 0.3;
+      p.uArmLX = -0.35 + Math.max(0, -gst) * 0.3; p.uArmLZ = 0.25; p.fArmLX = -0.7;
+      p.hipsY = Math.sin(t * 1.3) * 0.05;
+      break;
+    }
     case 'attack':
       p.torsoX = 0.2; p.uArmRX = -1.6; p.fArmRX = -0.1; p.uArmLX = 0.3; p.thighLX = -0.4; p.shinLX = 0.4; p.thighRX = 0.3;
       break;
@@ -181,7 +302,7 @@ function poseFor(state, t, ch) {
       p.lean = -0.25; p.torsoX = -0.3; p.headX = -0.4; p.uArmLZ = 0.7; p.uArmRZ = -0.7;
       break;
     case 'kneel':
-      p.sitDrop = 0.42; p.thighLX = -1.4; p.shinLX = 1.4; p.thighRX = 0.1; p.shinRX = 1.6; p.torsoX = 0.4; p.headX = 0.4;
+      p.sitDrop = 0.42; p.thighLX = 1.4; p.shinLX = 1.4; p.thighRX = -0.1; p.shinRX = 1.6; p.torsoX = 0.4; p.headX = 0.4;
       p.uArmLX = 0.2; p.uArmRX = 0.2;
       break;
     case 'lie':
@@ -228,8 +349,9 @@ export class Character {
     const legLen = 0.9 * k;
     const skin = this.mat({ color: s.skin });
     const top = this.mat({ map: fabricTex(s.top, [2, 2], 3) });
-    const pants = this.mat({ map: fabricTex(s.pants, [2, 2], 4) });
-    const shoes = this.mat({ color: s.shoes });
+    const pants = this.mat({ map: trousersTex(s.pants) });
+    const shoes = this.mat({ map: shoeTex(s.shoes) });
+    const handM = this.mat({ map: handTex(s.skin, s.skinDark) });
     const coatM = s.coat ? this.mat({ map: fabricTex(s.coat, [2, 3], 6) }) : null;
     const hairM = this.mat({ map: hairTex(s.hair, [1, 1], s.hairSeed ?? 4) });
 
@@ -241,11 +363,13 @@ export class Character {
     this.torso = new THREE.Group(); this.hips.add(this.torso);
     const torsoMat = coatM || top;
     const tw = (s.shoulders ?? 0.4) * k;
-    const torsoMesh = taperBox(tw, 0.32 * k, 0.56 * k, 0.22 * k, 0.2 * k, torsoMat, 0.28 * k + 0.04 * k);
+    const frontKind = coatM ? (s.longCoat ? 'coat' : 'jacket') : (s.topKind || 'sweater');
+    const frontM = this.mat({ map: clothFrontTex(coatM ? s.coat : s.top, frontKind, s.buttons || '#2a2622') });
+    const torsoMesh = taperBox(tw, 0.32 * k, 0.56 * k, 0.22 * k, 0.2 * k, [torsoMat, torsoMat, torsoMat, torsoMat, frontM, torsoMat], 0.28 * k + 0.04 * k);
     this.torso.add(torsoMesh);
     if (coatM) {
       // collar / inner top visible in front
-      const inner = boxMesh(0.12 * k, 0.22 * k, 0.02, top, { y: 0.46 * k, z: 0.115 * k });
+      const inner = boxMesh(0.07 * k, 0.12 * k, 0.02, top, { y: 0.52 * k, z: 0.113 * k });
       this.torso.add(inner);
     }
     if (s.backpack) {
@@ -288,9 +412,9 @@ export class Character {
     nose.position.set(0, hh * 0.47, hd / 2 + 0.012);
     this.head.add(nose);
     if (s.noseRing) {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.012 * k, 0.003, 3, 6), this.mat({ color: 0xe6dcb5, emissive: 0x332a10 }));
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.008 * k, 0.0022, 3, 6), this.mat({ color: 0xe6dcb5, emissive: 0x332a10 }));
       const septum = s.noseRing === 'septum';
-      ring.position.set(septum ? 0 : 0.016 * k, hh * (septum ? 0.3 : 0.33), hd / 2 + (septum ? 0.04 : 0.03));
+      ring.position.set(septum ? 0 : 0.016 * k, hh * (septum ? 0.36 : 0.36), hd / 2 + (septum ? 0.035 : 0.03));
       ring.rotation.y = septum ? 0 : Math.PI / 2;
       this.head.add(ring);
       this.noseRing = ring;
@@ -309,8 +433,8 @@ export class Character {
     if (s.hat) {
       // slouchy knitted beanie
       const km = this.mat({ map: knitTex(s.hatColor ?? '#b3382c', [4, 2]) });
-      const geo = new THREE.SphereGeometry(0.15 * k, 9, 6, 0, Math.PI * 2, 0, Math.PI * 0.62);
-      geo.scale(1.0, 1.05, 1.12);
+      const geo = new THREE.SphereGeometry(0.168 * k, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.62);
+      geo.scale(1.04, 1.0, 1.1);
       const hat = new THREE.Mesh(geo, km);
       hat.position.set(0, hh * 0.68, -0.012 * k);
       hat.rotation.x = -0.28;
@@ -334,7 +458,7 @@ export class Character {
       sh.add(boxMesh(0.09 * k, ua, 0.1 * k, armMat, { y: -ua / 2 }));
       const el = new THREE.Group(); el.position.y = -ua; sh.add(el);
       el.add(boxMesh(0.08 * k, fa, 0.09 * k, armMat, { y: -fa / 2 }));
-      const hand = boxMesh(0.07 * k, 0.09 * k, 0.05 * k, skin, { y: -fa - 0.04 * k });
+      const hand = boxMesh(0.07 * k, 0.09 * k, 0.05 * k, handM, { y: -fa - 0.04 * k });
       el.add(hand);
       return { sh, el, hand };
     };
@@ -426,6 +550,12 @@ export class Character {
     this.baby = g;
   }
 
+  /** hold an object (mesh) in front of the chest; null to drop it */
+  carry(mesh) {
+    if (this.carryMesh) { this.torso.remove(this.carryMesh); this.carryMesh = null; }
+    if (mesh) { mesh.position.set(0, 0.32 * this.k, 0.34 * this.k); this.torso.add(mesh); this.carryMesh = mesh; }
+  }
+
   setBaby(on) {
     if (on && !this.baby) this.addBaby();
     if (this.baby) this.baby.visible = on;
@@ -434,6 +564,7 @@ export class Character {
   setExpression(expr) {
     if (expr === this.expr) return;
     this.expr = expr;
+    this._shownClosed = false;
     this.faceMat.map = faceTexture(this.faceSpec, expr);
     this.faceMat.needsUpdate = true;
   }
@@ -446,9 +577,31 @@ export class Character {
   /** movement speed in m/s, used to drive step phase */
   update(dt, speed = 0) {
     this.t += dt;
+    this.speedNow = speed;
+    // turning rate → lean into turns
+    const rotY = this.root.rotation.y;
+    if (this._prevRot === undefined) this._prevRot = rotY;
+    let dRot = rotY - this._prevRot; dRot = Math.atan2(Math.sin(dRot), Math.cos(dRot));
+    this._prevRot = rotY;
+    const turnRate = dt > 0 ? dRot / dt : 0;
+    this.turnLean = lerp(this.turnLean ?? 0, Math.max(-0.12, Math.min(0.12, -turnRate * 0.035 * Math.min(1, speed / 1.5))), Math.min(1, dt * 6));
+    // blinking
+    this.blinkT = (this.blinkT ?? 1 + Math.random() * 3) - dt;
+    if (this.blinkT <= 0) { this.blinkT = 2.2 + Math.random() * 4; this.blink = 0.13; }
+    const wasBlink = this.blink > 0;
+    if (this.blink > 0) this.blink -= dt;
+    const showClosed = this.blink > 0 && this.expr !== 'closed';
+    if (showClosed !== this._shownClosed) {
+      this._shownClosed = showClosed;
+      this.faceMat.map = faceTexture(this.faceSpec, showClosed ? 'closed' : this.expr);
+      this.faceMat.needsUpdate = true;
+    }
+    void wasBlink;
     const stride = this.state === 'run' ? 1.1 : 0.72;
     this.phase += dt * (speed / stride) * Math.PI;
     if (this.state === 'scary') this.phase += dt * 6;
+    const sc = Math.floor(this.phase / Math.PI);
+    if (sc !== this.stepCount) { this.stepCount = sc; this.stepped = true; }
     const target = poseFor(this.state, this.t, this);
     const a = 1 - Math.exp(-dt * this.blendRate);
     for (const key in target) this.pose[key] = lerp(this.pose[key], target[key], a);
@@ -457,16 +610,24 @@ export class Character {
     this.hips.position.y = 0.9 * k + p.bob - p.sitDrop;
     this.hips.rotation.y = p.hipsY;
     this.hips.rotation.x = p.lean;
-    this.torso.rotation.set(p.torsoX, -p.hipsY * 1.4, p.torsoZ);
+    this.torso.rotation.set(p.torsoX, -p.hipsY * 1.4, p.torsoZ + this.turnLean);
     this.head.rotation.set(p.headX + this.lookPitch, p.headY + this.lookYaw, p.headZ);
     this.armL.sh.rotation.set(p.uArmLX, p.uArmLY, p.uArmLZ);
     this.armR.sh.rotation.set(p.uArmRX, p.uArmRY, p.uArmRZ);
     this.armL.el.rotation.x = p.fArmLX; this.armR.el.rotation.x = p.fArmRX;
     this.legL.hip.rotation.x = -p.thighLX; this.legR.hip.rotation.x = -p.thighRX;
     this.legL.knee.rotation.x = p.shinLX; this.legR.knee.rotation.x = p.shinRX;
+    if (this.carryMesh) {
+      // carrying something in both arms: arms forward regardless of walking
+      this.armL.sh.rotation.set(-0.85, 0, -0.28); this.armR.sh.rotation.set(-0.85, 0, 0.28);
+      this.armL.el.rotation.x = -0.75; this.armR.el.rotation.x = -0.75;
+    }
     if (this.skirt) {
+      // the coat follows the legs and flutters with speed
       const avg = Math.min(-p.thighLX, -p.thighRX);
-      this.skirt.rotation.x = Math.min(0, avg) * 0.6;
+      const flap = Math.min(0.35, speed * 0.07) + Math.sin(this.t * 7) * Math.min(0.04, speed * 0.012);
+      this.skirt.rotation.x = lerp(this.skirt.rotation.x, Math.min(0, avg) * 0.6 - flap * (this.state === 'sit' ? 0 : 1), Math.min(1, dt * 10));
+      this.skirt.rotation.z = -this.turnLean * 0.8;
     }
   }
 

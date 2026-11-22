@@ -232,10 +232,18 @@ function buildField(g, th, R, ctx, cfg) {
   B.plane(g, 80, 80, B.M({ map: th.floor() }), 0, 0, 0);
   const radius = 26;
   g.bounds = (p) => { const d = Math.hypot(p.x, p.z); if (d > radius) { p.x *= radius / d; p.z *= radius / d; } };
+  // the edge of the forest is a visible old fence, not an invisible wall
+  B.fenceRing(g, radius + 0.4, radius + 0.4, { segments: 56, color: '#2e2824', height: 1.4, solid: false });
+  // a dense ring of dead trees just behind the fence
+  for (let i = 0; i < 46; i++) {
+    const a = (i / 46) * Math.PI * 2 + R() * 0.05;
+    const d = radius + 1.6 + R() * 4;
+    B.bareTree(g, Math.cos(a) * d, Math.sin(a) * d, { h: 4 + R() * 4, solid: false });
+  }
   ctx.start.set(0, 0, 20); ctx.startRot = Math.PI;
   ctx.door.set(0, 0, -22); ctx.doorRot = 0;
-  for (let i = 0; i < 26; i++) {
-    const a = R() * Math.PI * 2, d = 6 + R() * 20;
+  for (let i = 0; i < 40; i++) {
+    const a = R() * Math.PI * 2, d = 6 + R() * 19;
     const x = Math.cos(a) * d, z = Math.sin(a) * d;
     if (Math.hypot(x - ctx.start.x, z - ctx.start.z) < 3 || Math.hypot(x - ctx.door.x, z - ctx.door.z) < 3) continue;
     if (R() < 0.35) B.lampPost(g, x, z, { on: R() < 0.6, intensity: 1.1, dist: 7, color: 0xd8c8a0 });
