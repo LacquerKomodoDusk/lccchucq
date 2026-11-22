@@ -384,3 +384,58 @@ export function warehouseFloorTex(repeat = [1, 1]) {
     for (let i = 0; i < 4; i++) { g.fillStyle = 'rgba(30,25,20,0.2)'; g.fillRect(Math.floor(r() * 26), Math.floor(r() * 26), 6, 3); }
   }, { repeat, key: 'whfloor' });
 }
+
+/** beige check (plaid) coat fabric — like the hero's trench on the concept sheet */
+export function checkTex(base = '#b59e78', line = '#8a7656', repeat = [1, 1]) {
+  return canvasTexture(64, 64, (g) => {
+    const r = rng(101);
+    for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) {
+      const tw = ((x + y) % 3 === 0) ? 0.96 : 1.02; // fine twill
+      g.fillStyle = shade(base, tw * (0.95 + r() * 0.07)); g.fillRect(x, y, 1, 1);
+    }
+    g.globalAlpha = 0.55; g.fillStyle = line;
+    for (let i = 0; i < 64; i += 16) { g.fillRect(i, 0, 2, 64); g.fillRect(0, i, 64, 2); }
+    g.globalAlpha = 0.25;
+    for (let i = 8; i < 64; i += 16) { g.fillRect(i, 0, 1, 64); g.fillRect(0, i, 64, 1); }
+    g.globalAlpha = 1;
+  }, { repeat, key: `check-${base}-${line}` });
+}
+
+/** horizontal stripes (children's sweaters), knitted */
+export function stripeTex(a = '#3a4a6a', b = '#8a96a8', repeat = [1, 1], band = 6) {
+  return canvasTexture(32, 32, (g) => {
+    for (let y = 0; y < 32; y++) {
+      const c = Math.floor(y / band) % 2 ? b : a;
+      for (let x = 0; x < 32; x++) {
+        const v = ((x % 4 < 2) !== (y % 2 === 0)) ? 1.04 : 0.88;
+        g.fillStyle = shade(c, v); g.fillRect(x, y, 1, 1);
+      }
+    }
+  }, { repeat, key: `stripe-${a}-${b}-${band}` });
+}
+
+/** denim: diagonal twill with lighter wear */
+export function denimTex(base = '#3a4a6a', repeat = [1, 1]) {
+  return canvasTexture(32, 32, (g) => {
+    const r = rng(111);
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+      const tw = ((x + y) % 4 < 2) ? 1.06 : 0.9;
+      g.fillStyle = shade(base, tw * (0.93 + r() * 0.1)); g.fillRect(x, y, 1, 1);
+    }
+    for (let i = 0; i < 18; i++) { g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(Math.floor(r() * 30), Math.floor(r() * 32), 2, 1); }
+  }, { repeat, key: `denim-${base}` });
+}
+
+/** curly hair: little round curls with highlights */
+export function curlyHairTex(base = '#7f5a38', repeat = [1, 1]) {
+  return canvasTexture(32, 32, (g) => {
+    const r = rng(121);
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) { g.fillStyle = shade(base, 0.7 + r() * 0.1); g.fillRect(x, y, 1, 1); }
+    for (let i = 0; i < 70; i++) {
+      const x = Math.floor(r() * 30), y = Math.floor(r() * 30);
+      g.fillStyle = shade(base, 1.0 + r() * 0.15); g.fillRect(x, y, 3, 2); g.fillRect(x + 1, y + 2, 1, 1);
+      g.fillStyle = shade(base, 1.35); g.fillRect(x + 1, y, 1, 1);
+      g.fillStyle = shade(base, 0.55); g.fillRect(x + 2, y + 2, 1, 1);
+    }
+  }, { repeat, key: `curly-${base}` });
+}

@@ -256,7 +256,7 @@ export default {
 
     // other passengers (anonymous silhouettes of a memory)
     for (const [x, z, c] of [[0.95, 1.2, '#4a4f5a'], [0.5, -0.7, '#5a4a40'], [0.95, -1.65, '#3f4a44'], [-0.95, -0.7, '#3a3a48']]) {
-      const p = g.spawn({ ...heroSpec('everyday'), beard: null, hair: '#3a3430', hairStyle: 'short', top: c, coat: c, longCoat: false, backpack: null, height: 1.72, skin: '#b0a098', thickBrows: false }, [x, 0.02, z + 0.05], 0);
+      const p = g.spawn({ ...heroSpec('everyday'), beard: null, hair: '#3a3430', hairStyle: 'short', faceSet: null, top: c, coat: c, longCoat: false, backpack: null, height: 1.72, skin: '#b0a098', thickBrows: false }, [x, 0.02, z + 0.05], 0);
       p.state = 'sit'; p.setExpression('closed');
       W.bus.attach(p.root);
     }

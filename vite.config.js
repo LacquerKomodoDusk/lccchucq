@@ -9,5 +9,7 @@ export default defineConfig(({ mode }) => ({
   build: {
     outDir: mode === 'single' ? 'dist-single' : 'dist',
     chunkSizeWarningLimit: 2000,
+    // sheet textures are small: inline them so the single-file build is self-contained
+    assetsInlineLimit: mode === 'single' ? 100000000 : 4096,
   },
 }));

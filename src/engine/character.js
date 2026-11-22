@@ -1,7 +1,8 @@
 // Low-poly characters with pixel-art face textures and procedural animation.
 import * as THREE from 'three';
 import { ps1Material } from './ps1.js';
-import { canvasTexture, fabricTex, hairTex, knitTex } from './textures.js';
+import { faceSetTexture, hasFaceSet, refTexture } from './refTextures.js';
+import { canvasTexture, fabricTex, hairTex, knitTex, checkTex, stripeTex, denimTex, curlyHairTex } from './textures.js';
 
 /* ---------------------------------------------------------------- faces */
 
@@ -153,11 +154,16 @@ export function earTex(skin, skinDark, hair) {
 }
 
 /** clothing front: coat with lapels & buttons, jacket with zip, sweater, t-shirt */
-export function clothFrontTex(base, kind = 'coat', accent = '#2a2a2a') {
+export function clothFrontTex(base, kind = 'coat', accent = '#2a2a2a', pattern = null) {
   return canvasTexture(32, 32, (g) => {
     for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
       const k = ((x + y) % 2 ? 0.95 : 1.02) * (0.94 + ((x * 7 + y * 13) % 11) / 100);
       px(g, x, y, 1, 1, mix(base, '#000000', 1 - k));
+    }
+    if (pattern === 'check') {
+      g.globalAlpha = 0.45; g.fillStyle = mix(base, '#000000', 0.3);
+      for (let i = 0; i < 32; i += 8) { g.fillRect(i, 0, 1, 32); g.fillRect(0, i, 32, 1); }
+      g.globalAlpha = 1;
     }
     const dark = mix(base, '#000000', 0.35), light = mix(base, '#ffffff', 0.12);
     if (kind === 'coat') {
@@ -176,7 +182,7 @@ export function clothFrontTex(base, kind = 'coat', accent = '#2a2a2a') {
     } else if (kind === 'tshirt') {
       px(g, 11, 0, 10, 2, dark);
     }
-  }, { key: `cloth-${base}-${kind}-${accent}` });
+  }, { key: `cloth-${base}-${kind}-${accent}-${pattern}` });
 }
 
 /** jeans / trousers with seams */
@@ -506,12 +512,13 @@ export class Character {
     this.k = k;
     const legLen = 0.9 * k;
     const skin = this.mat({ color: s.skin });
-    const top = this.mat({ map: fabricTex(s.top, [2, 2], 3) });
-    const pants = this.mat({ map: trousersTex(s.pants) });
+    const topMap = s.topTex ? refTexture(s.topTex, { repeat: [2, 2] }) : s.topKind === 'knit' ? knitTex(s.top, [3, 3]) : s.topKind === 'stripes' ? stripeTex(s.top, s.stripe || '#c8c8c0', [2, 2]) : fabricTex(s.top, [2, 2], 3);
+    const top = this.mat({ map: topMap });
+    const pants = this.mat({ map: s.pantsTex ? refTexture(s.pantsTex, { repeat: [1, 2] }) : s.jeans ? denimTex(s.pants, [2, 3]) : trousersTex(s.pants) });
     const shoes = this.mat({ map: shoeTex(s.shoes) });
     const handM = this.mat({ map: handTex(s.skin, s.skinDark) });
-    const coatM = s.coat ? this.mat({ map: fabricTex(s.coat, [2, 3], 6) }) : null;
-    const hairM = this.mat({ map: hairTex(s.hair, [1, 1], s.hairSeed ?? 4) });
+    const coatM = s.coat ? this.mat({ map: s.coatTex ? refTexture(s.coatTex, { repeat: [2, 2] }) : s.coatPattern === 'check' ? checkTex(s.coat, s.checkLine || mix(s.coat, '#000000', 0.28), [2, 3]) : fabricTex(s.coat, [2, 3], 6) }) : null;
+    const hairM = this.mat({ map: s.hairTex ? refTexture(s.hairTex, { repeat: [1, 1] }) : hairTex(s.hair, [1, 1], s.hairSeed ?? 4) });
 
     this.hips = new THREE.Group(); this.hips.position.y = legLen; this.root.add(this.hips);
     // pelvis
@@ -522,7 +529,8 @@ export class Character {
     const torsoMat = coatM || top;
     const tw = (s.shoulders ?? 0.4) * k;
     const frontKind = coatM ? (s.longCoat ? 'coat' : 'jacket') : (s.topKind || 'sweater');
-    const frontM = this.mat({ map: clothFrontTex(coatM ? s.coat : s.top, frontKind, s.buttons || '#2a2622') });
+    const patterned = !coatM && (s.topKind === 'knit' || s.topKind === 'stripes');
+    const frontM = patterned ? top : this.mat({ map: clothFrontTex(coatM ? s.coat : s.top, frontKind, s.buttons || '#2a2622', s.coatPattern || null) });
     const torsoMesh = taperBox(tw, tw * 0.86, 0.56 * k, 0.22 * k, 0.2 * k, [torsoMat, torsoMat, torsoMat, torsoMat, frontM, torsoMat], 0.28 * k + 0.04 * k);
     this.torso.add(torsoMesh);
     if (coatM) {
@@ -560,7 +568,12 @@ export class Character {
       beard: s.beard || null, beardDark: s.beardDark || null, noseRing: !!s.noseRing, thickBrows: !!s.thickBrows,
       lashes: !!s.lashes, hairline: s.hairline ?? 3, fringe: !!s.fringe,
     };
-    this.faceMat = this.mat({ map: faceTexture(this.faceSpec, 'neutral') });
+    this.faceSetName = s.faceSet && hasFaceSet(s.faceSet) ? s.faceSet : null;
+    this.faceMat = this.mat({ map: this.faceSetName ? faceSetTexture(this.faceSetName, 'neutral') : faceTexture(this.faceSpec, 'neutral') });
+    if (this.faceSetName) {
+      // painted faces from the sheet: a little self-light so they read in dim scenes
+      this.faceMat.emissive = new THREE.Color(0x3a3430); this.faceMat.emissiveMap = this.faceMat.map;
+    }
     const hw = 0.21 * k, hh = 0.25 * k, hd = 0.23 * k;
     const female = s.name === 'wife';
     const kid = (s.headScale ?? 1) > 1.1;
@@ -572,6 +585,7 @@ export class Character {
     const noseGeo = new THREE.ConeGeometry(0.022 * k, 0.07 * k, 4, 1);
     noseGeo.rotateY(Math.PI / 4); noseGeo.scale(1, 1, 0.9);
     const nose = new THREE.Mesh(noseGeo, skin);
+    nose.visible = !this.faceSetName;
     nose.position.set(0, hh * 0.47, hd / 2 + 0.006 * k);
     nose.rotation.x = -0.32;
     this.head.add(nose);
@@ -580,11 +594,12 @@ export class Character {
       const septum = s.noseRing === 'septum';
       ring.position.set(septum ? 0 : 0.016 * k, hh * (septum ? 0.36 : 0.36), hd / 2 + (septum ? 0.035 : 0.03));
       ring.rotation.y = septum ? 0 : Math.PI / 2;
+      ring.visible = !this.faceSetName; // the painted face already has it
       this.head.add(ring);
       this.noseRing = ring;
     }
     this.buildHair(hairM, hw, hh, hd, k);
-    if (s.beard) {
+    if (s.beard && !this.faceSetName) {
       // a faceted beard shell hugging the jaw and cheeks; the mouth stays open
       const bm = this.mat({ map: hairTex(s.beard, [2, 2], 9) });
       const shell = sculptedHead(hw * 1.1, hh * 1.04, hd * 1.12, { female: false });
@@ -611,11 +626,11 @@ export class Character {
     }
     if (s.hat) {
       // slouchy knitted beanie
-      const km = this.mat({ map: knitTex(s.hatColor ?? '#b3382c', [4, 2]) });
+      const km = this.mat({ map: s.hatTex ? refTexture(s.hatTex, { repeat: [3, 2] }) : knitTex(s.hatColor ?? '#b3382c', [4, 2]) });
       const geo = new THREE.SphereGeometry(0.168 * k, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.62);
       geo.scale(1.04, 1.0, 1.1);
       const hat = new THREE.Mesh(geo, km);
-      hat.position.set(0, hh * 0.68, -0.012 * k);
+      hat.position.set(0, hh * (this.faceSetName ? 0.76 : 0.68), -0.012 * k);
       hat.rotation.x = -0.28;
       this.head.add(hat);
       const slouch = new THREE.Mesh(new THREE.SphereGeometry(0.1 * k, 7, 5), km);
@@ -623,7 +638,7 @@ export class Character {
       slouch.position.set(0, hh * 0.86, -0.13 * k);
       this.head.add(slouch);
       const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.122 * k, 0.124 * k, 0.045 * k, 10, 1, true), this.mat({ map: knitTex(s.hatColor ?? '#b3382c', [6, 1]), side: THREE.DoubleSide }));
-      brim.position.set(0, hh * 0.78, -0.005);
+      brim.position.set(0, hh * (this.faceSetName ? 0.86 : 0.78), -0.005);
       brim.rotation.x = -0.14;
       this.head.add(brim);
       this.hat = hat;
@@ -664,6 +679,14 @@ export class Character {
       const sk = taperBox(0.36 * k, 0.46 * k, (s.coatLength ?? 0.55) * k, 0.24 * k, 0.32 * k, coatM, -(s.coatLength ?? 0.55) * k / 2 + 0.04);
       this.skirt.add(sk);
       if (s.belt) this.torso.add(boxMesh(0.34 * k, 0.04 * k, 0.23 * k, this.mat({ color: s.belt }), { y: 0.04 * k }));
+    }
+
+    if (!this.skirt && s.skirt) {
+      // a skirt hanging from the hips (moves with the legs like the coat)
+      const skM = this.mat({ map: s.skirtTex ? refTexture(s.skirtTex, { repeat: [2, 1] }) : denimTex(s.skirt, [2, 2]) });
+      const L = (s.skirtLength ?? 0.5) * k;
+      this.skirt = new THREE.Group(); this.hips.add(this.skirt);
+      this.skirt.add(taperBox(0.33 * k, 0.48 * k, L, 0.22 * k, 0.34 * k, skM, -L / 2 + 0.05));
     }
 
     // soft blob shadow on the ground (classic PS1 grounding)
@@ -709,13 +732,51 @@ export class Character {
       const len = (s.hairLength ?? 0.55) * k;
       // the long back of the hair hangs from a pivot so it can sway
       this.hairPivot = new THREE.Group(); this.hairPivot.position.set(0, hh + 0.03, -hd / 2 - 0.02); this.head.add(this.hairPivot);
-      this.hairPivot.add(boxMesh(hw * 1.2, len, 0.06 * k, hairM, { y: -len / 2 }));
+      {
+        // wavy back panel: subdivided and rippled
+        const wg = new THREE.BoxGeometry(hw * 1.25, len, 0.07 * k, 4, 8, 1);
+        const wp = wg.attributes.position;
+        for (let j = 0; j < wp.count; j++) {
+          const y = wp.getY(j);
+          wp.setX(j, wp.getX(j) * (1 + (y < 0 ? -y / len * 0.25 : 0)) + Math.sin(y * 38) * 0.008 * k);
+          wp.setZ(j, wp.getZ(j) + Math.cos(y * 30 + wp.getX(j) * 40) * 0.012 * k);
+        }
+        wg.translate(0, -len / 2, 0); wg.computeVertexNormals();
+        this.hairPivot.add(new THREE.Mesh(wg, s.hairTex ? hairM : s.hairWavy ? this.mat({ map: curlyHairTex(s.hair, [2, 4]) }) : hairM));
+      }
       const sideTop = s.hat ? hh * 0.74 : hh;
       this.head.add(boxMesh(0.04, len * 0.8, hd * 0.55, hairM, { x: hw / 2 + 0.015, y: sideTop - len * 0.4 + 0.02, z: -0.04 }));
       this.head.add(boxMesh(0.04, len * 0.8, hd * 0.55, hairM, { x: -hw / 2 - 0.015, y: sideTop - len * 0.4 + 0.02, z: -0.04 }));
       // strands in front of shoulders
       this.head.add(boxMesh(0.05, len * 0.6, 0.05, hairM, { x: hw / 2 + 0.005, y: hh * 0.5 - len * 0.25, z: hd * 0.25 }));
       this.head.add(boxMesh(0.05, len * 0.6, 0.05, hairM, { x: -hw / 2 - 0.005, y: hh * 0.5 - len * 0.25, z: hd * 0.25 }));
+    } else if (style === 'curly') {
+      // tousled curly hair: a cap plus a cloud of faceted curls
+      const cm = this.mat({ map: curlyHairTex(s.hair) });
+      const capGeo = new THREE.SphereGeometry(1, 10, 7, 0, Math.PI * 2, 0, Math.PI * 0.5);
+      capGeo.scale(hw * 0.6, hh * 0.5, hd * 0.62);
+      const cap = new THREE.Mesh(capGeo, cm); cap.position.set(0, hh * 0.72, -0.02 * k); cap.rotation.x = -0.28; this.head.add(cap);
+      let sd = (s.hairSeed ?? 3) * 977 + 13;
+      const rnd = () => ((sd = (sd * 1664525 + 1013904223) >>> 0) / 4294967296);
+      const n = s.curlCount ?? 26;
+      for (let i = 0; i < n; i++) {
+        const th = rnd() * Math.PI * 2, ph = rnd() * Math.PI * 0.62;
+        const fx = Math.sin(ph) * Math.sin(th), fy = Math.cos(ph), fz = Math.sin(ph) * Math.cos(th);
+        if (fz > 0.25 && ph > Math.PI * 0.22) continue; // keep the forehead and face clear
+        const rr = (0.036 + rnd() * 0.026) * k * (s.curlSize ?? 1);
+        const cg = new THREE.IcosahedronGeometry(rr, 0);
+        const cp = cg.attributes.position;
+        for (let j = 0; j < cp.count; j++) cp.setXYZ(j, cp.getX(j) * (0.85 + rnd() * 0.3), cp.getY(j) * (0.8 + rnd() * 0.3), cp.getZ(j) * (0.85 + rnd() * 0.3));
+        cg.computeVertexNormals();
+        const curl = new THREE.Mesh(cg, cm);
+        curl.position.set(fx * hw * 0.64, hh * 0.68 + fy * hh * 0.5, -0.02 * k + fz * hd * 0.66);
+        this.head.add(curl);
+      }
+      // a few curls falling on the forehead
+      for (const x of [-0.05, 0.0, 0.055]) {
+        const c = new THREE.Mesh(new THREE.IcosahedronGeometry(0.03 * k, 0), cm);
+        c.position.set(x * k, hh * 1.02, hd * 0.42); this.head.add(c);
+      }
     } else if (style === 'short') {
       const cap = taperBox(hw * 1.1, hw * 1.08, 0.06 * k, hd * 1.1, hd * 1.08, hairM);
       cap.position.set(0, hh + 0.01, 0);
@@ -754,7 +815,8 @@ export class Character {
     if (expr === this.expr) return;
     this.expr = expr;
     this._shownClosed = false;
-    this.faceMat.map = faceTexture(this.faceSpec, expr);
+    this.faceMat.map = this.faceSetName ? faceSetTexture(this.faceSetName, expr) : faceTexture(this.faceSpec, expr);
+    if (this.faceSetName) this.faceMat.emissiveMap = this.faceMat.map;
     this.faceMat.needsUpdate = true;
   }
 
@@ -779,8 +841,8 @@ export class Character {
     if (this.blinkT <= 0) { this.blinkT = 2.2 + Math.random() * 4; this.blink = 0.13; }
     const wasBlink = this.blink > 0;
     if (this.blink > 0) this.blink -= dt;
-    const showClosed = this.blink > 0 && this.expr !== 'closed';
-    if (showClosed !== this._shownClosed) {
+    const showClosed = this.blink > 0 && this.expr !== 'closed' && !this.faceSetName;
+    if (!this.faceSetName && showClosed !== this._shownClosed) {
       this._shownClosed = showClosed;
       this.faceMat.map = faceTexture(this.faceSpec, showClosed ? 'closed' : this.expr);
       this.faceMat.needsUpdate = true;
@@ -913,7 +975,7 @@ export class NightmareFigure {
       skin: '#8f8a86', skinDark: '#5f5a57', hair: spec.hair, brow: spec.brow, eye: '#111', lip: '#5b4040', lash: '#111',
       noseRing: true, lashes: true, hairline: 3,
     };
-    this.faceMat = mat({ map: faceTexture(this.faceSpec, 'neutral'), transparent: true, opacity: 0 });
+    this.faceMat = mat({ map: refTexture('wife_cry', { pale: true }), transparent: true, opacity: 0 });
     const face = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.25), this.faceMat);
     face.position.set(0, 0.13, 0.117);
     this.head.add(face);

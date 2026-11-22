@@ -10,7 +10,7 @@ export function showViewer(g, { close = false } = {}) {
   B.plane(g, 30, 30, B.M({ color: '#2e2c38' }), 0, 0, 0);
   const list = [
     heroSpec('trench'), heroSpec('everyday'), heroSpec('home'), heroSpec('tired'),
-    wifeSpec('busCoat'), wifeSpec('home'), ...CHILDREN,
+    wifeSpec('busCoat'), wifeSpec('summer'), ...CHILDREN,
   ];
   list.forEach((s, i) => { const c = g.spawn(s, [-6 + i * 1.3, 0, 0], 0); c.state = 'idle'; });
   const f = new NightmareFigure(WIFE_BASE); f.root.position.set(-6 + list.length * 1.3 + 0.3, 0, 0); g.add(f.root); g.addActor(f);
