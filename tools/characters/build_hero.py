@@ -77,25 +77,21 @@ def build_parts():
     head = Part('head', hv, hf, 'head', R['FACE'], mode='face'); head.rect2 = R['HEAD']; P.append(head)
     v, f = box((0, -0.122, 1.655), (0.032, 0.04, 0.062), taper=(0.45, 0.35))
     P.append(Part('nose', v, f, 'head', R['NOSE']))
-    # curly hair: a cap and a cloud of faceted curls (keeps the face clear)
-    v, f = uv_sphere((0, 0.012, 1.705), 0.118, scale=(1.0, 1.08, 0.72), seg=10, rings=8, top_only=True)
-    P.append(Part('hair_cap', v, f, 'head', R['HAIR']))
+    # curly hair: one connected faceted mass with lumps (one UV island, like the sheet)
+    v, f = uv_sphere((0, 0.016, 1.71), 0.13, scale=(1.0, 1.06, 0.86), seg=14, rings=10, top_only=True)
     rnd = random.Random(7)
-    curls_v, curls_f = [], []
-    n = 0
-    while n < 22:
-        th = rnd.random() * math.pi * 2
-        ph = rnd.random() * math.pi * 0.55
-        fx, fy, fz = math.sin(ph) * math.cos(th), math.sin(ph) * math.sin(th), math.cos(ph)
-        if fy < -0.25 and ph > math.pi * 0.2:
-            continue  # forehead / face
-        r = 0.04 + rnd.random() * 0.018
-        cv, cf = icosphere((fx * 0.112, 0.012 + fy * 0.12, 1.70 + fz * 0.085), r, jitter=0.35, seed=n)
-        base = len(curls_v)
-        curls_v += cv
-        curls_f += [[i + base for i in q] for q in cf]
-        n += 1
-    P.append(Part('curls', curls_v, curls_f, 'head', R['HAIR']))
+    lumpy = []
+    for (x, y, z) in v:
+        dx, dy, dz = x, y - 0.016, z - 1.71
+        k = 1 + (rnd.random() - 0.3) * 0.3
+        lift = 0.0
+        if dy < -0.05:
+            k = min(k, 1.04)
+            lift = 0.022 * min(1.0, (-dy - 0.05) / 0.07)  # hairline above the brows, not over the eyes
+        rim = max(0.0, 1 - dz / 0.05)  # the lowest ring hugs the skull instead of sticking out like a brim
+        kr = k * (1 - 0.14 * rim)
+        lumpy.append([dx * kr, 0.016 + dy * kr, 1.71 + dz * k + lift])
+    P.append(Part('hair', lumpy, f, 'head', R['HAIR']))
     # neck + turned-up coat collar
     v, f = cylinder((0, 0, 1.46), (0, 0, 1.58), 0.052, 0.056, sides=6)
     P.append(Part('neck', v, f, 'neck', R['SKIN']))
@@ -270,6 +266,300 @@ def uv_layout_png(parts, uvs_per_part, path, size=1024):
     img.save(path)
 
 
+
+# ------------------------------------------------------------------ UV unwrap in Blender
+def unwrap(obj):
+    """Real unwrap like a garment pattern:
+      * seams between side / top / bottom faces of every part,
+      * one vertical seam at the back of every part (like a back seam on clothes),
+      * the face front is its own pinned island (painted face),
+      * Angle Based unwrap, then the islands are packed (no overlaps, margins)
+        into the area right of the face island."""
+    import bpy
+    import bmesh
+    from collections import defaultdict
+    bpy.context.view_layer.objects.active = obj
+    for o in bpy.context.scene.objects:
+        o.select_set(o == obj)
+    bpy.context.scene.tool_settings.use_uv_select_sync = True
+    bpy.ops.object.mode_set(mode='EDIT')
+    bm = bmesh.from_edit_mesh(obj.data)
+    bm.edges.ensure_lookup_table()
+    uv = bm.loops.layers.uv.active
+    part_l = bm.faces.layers.int.get('part')
+    isl_l = bm.faces.layers.int.get('face_island')
+
+    def group(f):
+        if f[isl_l] == 1:
+            return 'face'
+        nz = f.normal.z
+        return 'top' if nz > 0.72 else 'bot' if nz < -0.72 else 'side'
+
+    for e in bm.edges:
+        e.seam = False
+        fs = e.link_faces
+        if len(fs) == 2 and group(fs[0]) != group(fs[1]):
+            e.seam = True
+    # one back seam per part, down the side band
+    by_part = defaultdict(list)
+    centers = defaultdict(list)
+    for f in bm.faces:
+        centers[f[part_l]].append(f.calc_center_median())
+    for e in bm.edges:
+        fs = e.link_faces
+        if len(fs) != 2 or e.seam:
+            continue
+        if group(fs[0]) != 'side' or group(fs[1]) != 'side' or fs[0][part_l] != fs[1][part_l]:
+            continue
+        a_, b_ = e.verts[0].co, e.verts[1].co
+        if abs(a_.z - b_.z) < 0.5 * (a_ - b_).length:
+            continue  # not a vertical edge
+        by_part[fs[0][part_l]].append(e)
+    for pi, edges in by_part.items():
+        cx = sum(c.x for c in centers[pi]) / len(centers[pi])
+        mids = [((e.verts[0].co + e.verts[1].co) / 2, e) for e in edges]
+        maxy = max(m.y for m, _ in mids)
+        back = [(m, e) for m, e in mids if m.y > maxy - 0.012]
+        x0 = min(back, key=lambda me: abs(me[0].x - cx))[0].x
+        for m, e in mids:
+            if abs(m.x - x0) < 0.012 and m.y > maxy - 0.03:
+                e.seam = True
+    # pin the face island, unwrap everything (pinned UVs stay where they are)
+    for f in bm.faces:
+        f.select = True
+        for l in f.loops:
+            l[uv].pin_uv = f[isl_l] == 1
+    bmesh.update_edit_mesh(obj.data)
+    bpy.ops.uv.unwrap(method='ANGLE_BASED', fill_holes=True, correct_aspect=True, margin=0.0)
+    # move every non-face island into the free region, then pack them there
+    bm = bmesh.from_edit_mesh(obj.data)
+    uv = bm.loops.layers.uv.active
+    fx, fy, fw, fh = R['FACE']
+    u0, u1, v0, v1 = (fx + fw + 2) / ATLAS, 1 - 2 / ATLAS, 2 / ATLAS, 1 - 2 / ATLAS
+    loops = [l for f in bm.faces if f[isl_l] != 1 for l in f.loops]
+    us = [l[uv].uv.x for l in loops]; vs_ = [l[uv].uv.y for l in loops]
+    mu, Mu, mv, Mv = min(us), max(us), min(vs_), max(vs_)
+    sc = min((u1 - u0) / (Mu - mu), (v1 - v0) / (Mv - mv))
+    for l in loops:
+        l[uv].uv.x = u0 + (l[uv].uv.x - mu) * sc
+        l[uv].uv.y = v0 + (l[uv].uv.y - mv) * sc
+    for f in bm.faces:
+        f.select = True
+    bmesh.update_edit_mesh(obj.data)
+    # pack all islands in the 0..1 square around the locked (pinned) face island
+    bpy.ops.uv.pack_islands(udim_source='CLOSEST_UDIM', rotate=True, scale=True, margin_method='FRACTION',
+                            margin=0.006, pin=True, pin_method='LOCKED', shape_method='CONCAVE')
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def read_faces(obj, parts):
+    me = obj.data
+    uvl = me.uv_layers.active.data
+    part_attr = me.attributes['part'].data
+    isl_attr = me.attributes['face_island'].data
+    out = []
+    for poly in me.polygons:
+        vs = [tuple(me.vertices[me.loops[li].vertex_index].co) for li in poly.loop_indices]
+        uvs = [tuple(uvl[li].uv) for li in poly.loop_indices]
+        out.append((parts[part_attr[poly.index].value].name, vs, tuple(poly.normal), uvs, isl_attr[poly.index].value == 1))
+    return out
+
+
+def apply_material(obj, atlas_path, name='hero'):
+    import bpy
+    mat = bpy.data.materials.new(name + '_mat')
+    mat.use_nodes = True
+    nt = mat.node_tree
+    bsdf = nt.nodes.get('Principled BSDF')
+    tex = nt.nodes.new('ShaderNodeTexImage')
+    img = bpy.data.images.load(atlas_path)
+    img.pack()
+    tex.image = img
+    tex.interpolation = 'Closest'
+    nt.links.new(tex.outputs['Color'], bsdf.inputs['Base Color'])
+    bsdf.inputs['Roughness'].default_value = 1.0
+    if 'Specular IOR Level' in bsdf.inputs:
+        bsdf.inputs['Specular IOR Level'].default_value = 0.0
+    mat.use_backface_culling = False
+    obj.data.materials.append(mat)
+
+
+# ------------------------------------------------------------------ projection painting
+def _pattern(fn, seed):
+    img = Image.new('RGBA', (ATLAS, ATLAS))
+    fn(img, (0, 0, ATLAS, ATLAS), seed)
+    return img.load()
+
+
+def _tiled(path, scale):
+    src = Image.open(path).convert('RGBA')
+    src = src.resize((max(1, int(src.width * scale)), max(1, int(src.height * scale))), Image.NEAREST)
+    img = Image.new('RGBA', (ATLAS, ATLAS))
+    for yy in range(0, ATLAS, src.height):
+        for xx in range(0, ATLAS, src.width):
+            img.paste(src, (xx, yy))
+    return img.load()
+
+
+class HeroPainter:
+    """Colour of a surface point of the hero, decided in 3D (so details land in the
+    right place whatever the orientation of the UV island)."""
+    def __init__(self, beard=True):
+        self.beard = beard
+        self.coat = _tiled(os.path.join(FABRIC, 'hero_coat.png'), 0.5)
+        self.shirt = _tiled(os.path.join(FABRIC, 'hero_shirt.png'), 0.5)
+        self.jeans = _tiled(os.path.join(FABRIC, 'hero_jeans.png'), 0.5)
+        self.hair = _pattern(lambda im, r, sd: curly(im, r, (128, 92, 60), sd), 7)
+        self.beardp = _pattern(lambda im, r, sd: curly(im, r, (96, 66, 44), sd), 11)
+        self.skin = _pattern(lambda im, r, sd: noise_fill(im, r, (205, 160, 128), 8, sd), 13)
+        self.leather = _pattern(lambda im, r, sd: noise_fill(im, r, (96, 64, 40), 10, sd), 21)
+        self.grey = _pattern(lambda im, r, sd: noise_fill(im, r, (104, 108, 114), 10, sd), 22)
+        self.strap = _pattern(lambda im, r, sd: noise_fill(im, r, (58, 60, 64), 8, sd), 23)
+
+    @staticmethod
+    def k(c, f):
+        return (max(0, min(255, int(c[0] * f))), max(0, min(255, int(c[1] * f))), max(0, min(255, int(c[2] * f))), 255)
+
+    def __call__(self, name, p, n, px, py):
+        x, y, z = p
+        front = n[1] < -0.5
+        coat = self.coat[px, py]
+        if name == 'head':
+            if abs(x) > 0.08 and 1.6 < z < 1.69 and -0.035 < y < 0.045:
+                inner = abs(z - 1.645) < 0.018 and abs(y - 0.005) < 0.018
+                return self.k(self.skin[px, py], 0.72 if inner else 0.88)          # ear
+            if z > 1.7 or y > 0.035:
+                return self.hair[px, py]
+            if self.beard and z < 1.66:
+                return self.beardp[px, py]
+            return self.skin[px, py]
+        if name in ('nose', 'neck'):
+            return self.skin[px, py]
+        if name in ('hair', 'hair_cap', 'curls'):
+            return self.hair[px, py]
+        if name == 'collar':
+            return self.k(coat, 0.92)
+        if name == 'chest':
+            if front and z > 1.27:
+                half = 0.058 * (z - 1.27) / 0.2
+                if abs(x) < half:
+                    return self.shirt[px, py]
+                if abs(abs(x) - half) < 0.009:
+                    return self.k(coat, 0.72)                                      # lapel edge
+            if front:
+                for bx in (-0.045, 0.045):
+                    for bz in (1.30, 1.245):
+                        if math.hypot(x - bx, z - bz) < 0.012:
+                            return (70, 52, 36, 255)
+            return coat
+        if name in ('abdomen', 'pelvis'):
+            if 1.025 < z < 1.058:
+                return (112, 92, 66, 255) if not (front and abs(x) < 0.02) else (176, 160, 120, 255)  # belt + buckle
+            if front and name == 'abdomen':
+                for bx in (-0.045, 0.045):
+                    for bz in (1.17, 1.11):
+                        if math.hypot(x - bx, z - bz) < 0.012:
+                            return (70, 52, 36, 255)
+                if abs(x) < 0.006:
+                    return self.k(coat, 0.75)
+            return coat
+        if name.startswith('flap'):
+            if z < 0.455:
+                return self.k(coat, 0.78)                                          # hem
+            if front and abs(x) < 0.014:
+                return self.k(coat, 0.72)                                          # front opening
+            return coat
+        if name.startswith('upperarm'):
+            return coat
+        if name.startswith('forearm'):
+            return self.k(coat, 0.8) if 0.9 < z < 0.925 else coat                  # cuff strap
+        if name.startswith('hand') or name.startswith('thumb'):
+            if name.startswith('hand') and front and z < 0.8 and px % 4 == 0:
+                return self.k(self.skin[px, py], 0.8)                             # fingers
+            return self.skin[px, py]
+        if name.startswith('thigh'):
+            return self.jeans[px, py]
+        if name.startswith('shin'):
+            if z < 0.15:
+                return self.k(self.jeans[px, py], 0.8)
+            return self.jeans[px, py]
+        if name.startswith('boot'):
+            if z < 0.022:
+                return (48, 34, 26, 255)                                           # sole
+            if n[2] > 0.5 and abs(abs(x) - 0.1) < 0.016 and py % 3 == 0:
+                return (176, 150, 110, 255)                                        # laces
+            return self.leather[px, py]
+        if name == 'pack':
+            if y > 0.24 and 1.1 < z < 1.24 and abs(x) < 0.115:
+                edge = abs(abs(x) - 0.115) < 0.01 or abs(z - 1.24) < 0.01 or abs(z - 1.1) < 0.01
+                return self.k(self.grey[px, py], 0.7 if edge else 0.95)            # front pocket
+            return self.grey[px, py]
+        if name == 'pack_flap':
+            return self.k(self.grey[px, py], 0.85)
+        if name.startswith('strap'):
+            return self.strap[px, py]
+        return (255, 0, 255, 255)
+
+
+def paint_projected(faces, painter, face_img_path):
+    img = Image.new('RGBA', (ATLAS, ATLAS), (0, 0, 0, 0))
+    px = img.load()
+    fx, fy, fw, fh = R['FACE']
+    face = Image.open(face_img_path).convert('RGBA').resize((fw, fh), Image.NEAREST)
+    img.paste(face, (fx, fy))
+    for name, vs, n, uvs, is_face in faces:
+        if is_face:
+            continue
+        P = [(u * ATLAS, (1 - v) * ATLAS) for (u, v) in uvs]
+        for t in range(1, len(vs) - 1):
+            a, b, c = 0, t, t + 1
+            (x0, y0), (x1, y1), (x2, y2) = P[a], P[b], P[c]
+            den = (y1 - y2) * (x0 - x2) + (x2 - x1) * (y0 - y2)
+            if abs(den) < 1e-9:
+                continue
+            for yy in range(max(0, int(min(y0, y1, y2)) - 1), min(ATLAS, int(max(y0, y1, y2)) + 2)):
+                for xx in range(max(0, int(min(x0, x1, x2)) - 1), min(ATLAS, int(max(x0, x1, x2)) + 2)):
+                    sx, sy = xx + 0.5, yy + 0.5
+                    l0 = ((y1 - y2) * (sx - x2) + (x2 - x1) * (sy - y2)) / den
+                    l1 = ((y2 - y0) * (sx - x2) + (x0 - x2) * (sy - y2)) / den
+                    l2 = 1 - l0 - l1
+                    tol = -0.04
+                    if l0 < tol or l1 < tol or l2 < tol:
+                        continue
+                    p3 = [vs[a][i] * l0 + vs[b][i] * l1 + vs[c][i] * l2 for i in range(3)]
+                    px[xx, yy] = painter(name, p3, n, xx, yy)
+    # bleed colours 3 px outward so nearest sampling never hits the empty background
+    for _ in range(3):
+        src = img.copy().load()
+        for yy in range(ATLAS):
+            for xx in range(ATLAS):
+                if src[xx, yy][3] == 0:
+                    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                        qx, qy = xx + dx, yy + dy
+                        if 0 <= qx < ATLAS and 0 <= qy < ATLAS and src[qx, qy][3]:
+                            px[xx, yy] = src[qx, qy]
+                            break
+    bg = Image.new('RGBA', (ATLAS, ATLAS), (20, 16, 14, 255))
+    bg.alpha_composite(img)
+    rnd = random.Random(99)
+    q = bg.load()
+    for yy in range(ATLAS):
+        for xx in range(ATLAS):
+            r, g, b_, a_ = q[xx, yy]
+            j = rnd.randint(-4, 4)
+            q[xx, yy] = (max(0, min(255, r + j)), max(0, min(255, g + j)), max(0, min(255, b_ + j)), 255)
+    return bg
+
+
+def uv_layout_from_faces(faces, path, size=1024):
+    img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    for name, vs, n, uvs, is_face in faces:
+        pts = [(u * size, (1 - v) * size) for (u, v) in uvs]
+        d.line(pts + [pts[0]], fill=(255, 255, 255, 235), width=1)
+    img.save(path)
+
+
 # ------------------------------------------------------------------ animations
 # Pose = {bone: (rx, ry, rz)} in bone-local euler radians (XYZ). Bones point along
 # their length; for limbs hanging down, +X swings the end backward, -X forward.
@@ -409,8 +699,11 @@ def build_blender(parts, uvs_per_part, atlas_path, name='hero'):
     me = bpy.data.meshes.new(name)
     bm = bmesh.new()
     uv_layer = bm.loops.layers.uv.new('UVMap')
+    part_layer = bm.faces.layers.int.new('part')
+    island_layer = bm.faces.layers.int.new('face_island')
+    fx, fy, fw, fh = R['FACE']
     groups = {}
-    for part, uvs in zip(parts, uvs_per_part):
+    for pi, (part, uvs) in enumerate(zip(parts, uvs_per_part)):
         verts = [bm.verts.new(v) for v in part.verts]
         for vi, v in enumerate(part.verts):
             bone = part.bone
@@ -424,6 +717,10 @@ def build_blender(parts, uvs_per_part, atlas_path, name='hero'):
                 continue
             for loop, uv in zip(face.loops, fuv):
                 loop[uv_layer].uv = uv
+            face[part_layer] = pi
+            # the painted face keeps its planar projection (locked island)
+            if part.mode == 'face' and all(u < (fx + fw) / ATLAS and v > 1 - (fy + fh) / ATLAS for u, v in fuv):
+                face[island_layer] = 1
     bm.verts.index_update()
     group_idx = {b: [v.index for v in vs] for b, vs in groups.items()}
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
@@ -439,22 +736,7 @@ def build_blender(parts, uvs_per_part, atlas_path, name='hero'):
     obj.parent = arm
     mod = obj.modifiers.new('Armature', 'ARMATURE')
     mod.object = arm
-    # material: one atlas, nearest filtering, matte
-    mat = bpy.data.materials.new(name + '_mat')
-    mat.use_nodes = True
-    nt = mat.node_tree
-    bsdf = nt.nodes.get('Principled BSDF')
-    tex = nt.nodes.new('ShaderNodeTexImage')
-    img = bpy.data.images.load(atlas_path)
-    img.pack()
-    tex.image = img
-    tex.interpolation = 'Closest'
-    nt.links.new(tex.outputs['Color'], bsdf.inputs['Base Color'])
-    bsdf.inputs['Roughness'].default_value = 1.0
-    if 'Specular IOR Level' in bsdf.inputs:
-        bsdf.inputs['Specular IOR Level'].default_value = 0.0
-    mat.use_backface_culling = False
-    obj.data.materials.append(mat)
+    unwrap(obj)
     # animations (one action per clip, each on its own NLA track)
     arm.animation_data_create()
     bone_names = [b[0] for b in BONES]
@@ -490,37 +772,40 @@ def build_blender(parts, uvs_per_part, atlas_path, name='hero'):
 
 
 def main():
+    import bpy
     parts = build_parts()
-    uvs = [compute_uvs(p) for p in parts]
+    uvs = [compute_uvs(p) for p in parts]   # only the face island is kept from this
     tris = tri_count(parts)
     print('hero triangles:', tris)
-    atlas = paint_atlas('hero_neutral')
     atlas_path = os.path.join(OUT, 'hero_atlas.png')
-    atlas.save(atlas_path)
-    # expression / age variants of the atlas (the game swaps the face region)
+    Image.new('RGBA', (ATLAS, ATLAS), (128, 128, 128, 255)).save(atlas_path)
+    arm, obj = build_blender(parts, uvs, atlas_path)
+    faces = read_faces(obj, parts)
+    # atlas + expression / age variants (same UVs, different face; young = no beard)
+    paint_projected(faces, HeroPainter(beard=True), os.path.join(FACES, 'hero_neutral.png')).save(atlas_path)
     for expr in ('anxious', 'pain', 'tired', 'resolve'):
-        paint_atlas('hero_' + expr).save(os.path.join(OUT, f'hero_atlas_{expr}.png'))
+        paint_projected(faces, HeroPainter(beard=True), os.path.join(FACES, f'hero_{expr}.png')).save(os.path.join(OUT, f'hero_atlas_{expr}.png'))
+    young = HeroPainter(beard=False)
     for expr in ('neutral', 'anxious', 'pain', 'tired', 'resolve'):
-        paint_atlas('hero_young_' + expr).save(os.path.join(OUT, f'hero_atlas_young_{expr}.png'))
-    uv_layout_png(parts, uvs, os.path.join(OUT, 'hero_uv.png'))
-    # UV overlay on the atlas (for review)
-    over = atlas.resize((1024, 1024), Image.NEAREST)
-    lay = Image.open(os.path.join(OUT, 'hero_uv.png'))
-    Image.alpha_composite(over, lay).save(os.path.join(OUT, 'hero_uv_on_atlas.png'))
-    import bpy
-    build_blender(parts, uvs, atlas_path)
+        paint_projected(faces, young, os.path.join(FACES, f'hero_young_{expr}.png')).save(os.path.join(OUT, f'hero_atlas_young_{expr}.png'))
+    uv_layout_from_faces(faces, os.path.join(OUT, 'hero_uv.png'))
+    over = Image.open(atlas_path).convert('RGBA').resize((1024, 1024), Image.NEAREST)
+    Image.alpha_composite(over, Image.open(os.path.join(OUT, 'hero_uv.png'))).save(os.path.join(OUT, 'hero_uv_on_atlas.png'))
+    apply_material(obj, atlas_path)
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT, 'hero.blend'))
     bpy.ops.export_scene.gltf(
         filepath=os.path.join(OUT, 'hero.glb'), export_format='GLB',
         export_animation_mode='NLA_TRACKS', export_skins=True, export_yup=True,
         export_apply=False, export_texcoords=True, export_normals=True, export_materials='EXPORT')
-    # copy what the browser viewer needs into public/ (served as /models/hero/...)
     import shutil
     pub = os.path.join(ROOT, 'public', 'models', 'hero')
     os.makedirs(pub, exist_ok=True)
     for fn in os.listdir(OUT):
         if fn.endswith('.glb') or fn.endswith('.png'):
             shutil.copy(os.path.join(OUT, fn), os.path.join(pub, fn))
+    bl1 = os.path.join(OUT, 'hero.blend1')
+    if os.path.exists(bl1):
+        os.remove(bl1)
     print('triangles', tris)
     print('done ->', OUT)
 
