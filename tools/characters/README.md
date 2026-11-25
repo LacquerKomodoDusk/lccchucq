@@ -59,28 +59,34 @@ node tools/characters/previews.cjs hero assets/characters/hero http://localhost:
 - **Анимации:** idle, walk, run, turn, look, sit, interact, hug, sleep,
   first_meeting_head_turn, stolen_glance, family_walk.
 
-# Головы (Face production spec v1.0)
+# Головы (Face production spec v1.0) — все четыре персонажа
 
 ```bash
-.blenv/bin/python tools/characters/face_expressions.py <лист_лиц.webp> src/assets/heads   # лица + 6 эмоций
-.blenv/bin/python tools/characters/build_head.py hero
-node tools/characters/head_previews.cjs hero assets/heads/hero http://localhost:4173
+.blenv/bin/python tools/characters/face_expressions.py <лист_лиц.webp>     # лица + эмоции всех четырёх
+.blenv/bin/python tools/characters/build_head.py                          # hero wife son_older son_younger
+node tools/characters/head_previews.cjs <персонаж> assets/heads/<персонаж> http://localhost:4173
 ```
 
-Файлы в `assets/heads/<персонаж>/`: `head.glb`, `head.blend`, `face_atlas.png`
-(+ `face_atlas_<эмоция>.png`), `face_uv.png`, `front.png`, `side.png`,
-`three_quarter.png`, а также `expressions.png`, `head_turn_bus.png`, `views.png`.
-Просмотрщик: `/heads.html` (ракурсы, каркас, скелет, эмоции, анимации).
+Папки `assets/heads/{hero,wife,son_older,son_younger}/`: `head.glb`, `head.blend`,
+`face_atlas.png` (+ `face_atlas_<эмоция>.png`), `face_uv.png`, `front.png`,
+`side.png`, `three_quarter.png`, `expressions.png`, `head_anim.png`, `views.png`.
+Сводные листы: `assets/heads/all_heads_views.png`, `all_heads_expressions.png`.
+Просмотрщик: `/heads.html` (персонажи, ракурсы, каркас, скелет, эмоции, шапка, анимации).
 
-Герой:
-- Голова 416 треугольников без волос и бороды (голова, нос, уши, шея), всего 746.
-  Волосы, борода и уши — отдельная геометрия.
-- Лицо — приоритетный UV-остров 128×128 в атласе 256×256, остальные острова
-  развёрнуты по швам сзади и упакованы без пересечений.
-- Нейтральное лицо — фронтальная текстура 128×128 с листа лиц. Ракурсы эмоций
-  на листе — 3/4, поэтому как текстуру их не наложить: эмоции (удивление,
-  тревога, усталость, грусть, радость) — сменные элементы (брови, веки, рот),
-  перерисованные в той же пиксельной сетке и палитре.
-- Кости `neck` и `head` совпадают по именам и положению со скелетом тела.
-- Анимации: idle, head_turn_bus (резкий поворот в автобусе), stolen_glance,
-  look_around, nod.
+- Голова без волос — 392 треугольника у каждого (300–600 по ТЗ). Волосы, борода,
+  шапка, кольцо — отдельная геометрия. Шапки жены и младшего сына — отдельные
+  съёмные объекты (`wife_hat`, `son_younger_hat`).
+- **Единая плотность пикселя:** лица всех четырёх приведены к одной плотности
+  (~350 px/м, по жене) и к общей сетке 2×2 px, поэтому пиксель на лице у всех
+  одного размера.
+- Лицо проецируется по ориентирам текстуры (линия глаз, подбородок, ширина
+  лица), поэтому глаза текстуры совпадают с глазницами геометрии.
+- Источники лиц: у жены и сыновей — фронтальные текстуры 128×128 с листа; у
+  героя фронтальная текстура листа грубая и с чрезмерной бородой, поэтому его
+  лицо собрано из крупного портрета (ближняя половина, отзеркалена, перемычка
+  между бровями убрана).
+- Эмоции (нейтр., удивление, тревога, усталость, грусть, радость) — сменные
+  элементы текстуры; у жены ещё «взгляд влево/вправо» для движения глаз.
+- Кости `neck`/`head` в позициях скелетов тел (у детей — на их росте).
+- Анимации: герой — head_turn_bus, stolen_glance; жена — glance_away
+  (быстрое отведение взгляда), stolen_glance; у всех — idle, look_around, nod.

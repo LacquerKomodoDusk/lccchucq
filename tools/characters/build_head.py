@@ -39,7 +39,7 @@ CHARS = {
     'wife': dict(base=1.44, W=0.19, H=0.24, D=0.22, jaw=0.46, female=True, kid=False,
                  eye_y=0.355, chin_y=0.66, face_w=0.5, hair_front=0.86, hair_side=0.3, hair_back=-0.1,
                  hair_scale=1.1, hair_jitter=0.12, fringe=False, beard=False, hat=('red', 1.17), ring=True,
-                 hair_box=(4, 60, 28, 120), collar=(118, 40, 36), long_hair=0.5),
+                 hair_box=(6, 64, 24, 110), hair_gain=1.7, collar=(118, 40, 36), long_hair=0.5),
     'son_older': dict(base=0.97, W=0.2, H=0.225, D=0.21, jaw=0.3, female=False, kid=True,
                       eye_y=0.385, chin_y=0.66, face_w=0.68, hair_front=0.8, hair_side=0.38, hair_back=0.05,
                       hair_scale=1.17, hair_jitter=0.34, fringe=True, beard=False, hat=None, ring=False,
@@ -191,11 +191,11 @@ def head_parts(char):
     if c.get('long_hair'):
         # long wavy hair down the back and two strands over the shoulders
         L = c['long_hair']
-        v, f = box((0, D / 2 + 0.01, base + H * 0.5 - L / 2 + 0.06), (W * 1.2, 0.06, L), taper=(1.15, 1.0), segs=(3, 1, 5))
+        v, f = box((0, D / 2 - 0.012, base + H * 0.55 - L / 2 + 0.06), (W * 1.12, 0.05, L), taper=(1.1, 1.0), segs=(4, 1, 6))
         v = [[x + math.sin(z * 40) * 0.006, y + math.cos(z * 30 + x * 50) * 0.008, z] for x, y, z in v]
         P.append(Part('hair_long', v, f, 'head', bh.R['HEAD']))
         for sx in (1, -1):
-            v, f = box((sx * (W / 2 + 0.008), -0.02, base + H * 0.42 - L * 0.32), (0.04, 0.07, L * 0.7), taper=(1.0, 1.1), segs=(1, 1, 4))
+            v, f = box((sx * (W / 2 + 0.004), -0.01, base + H * 0.5 - L * 0.3), (0.035, 0.06, L * 0.62), taper=(1.0, 1.2), segs=(1, 1, 4))
             v = [[x + math.sin(z * 45) * 0.006, y, z] for x, y, z in v]
             P.append(Part('strand.' + ('L' if sx > 0 else 'R'), v, f, 'head', bh.R['HEAD']))
     # beard: a thin shell only along the jaw and chin (the texture draws moustache and goatee)
@@ -213,18 +213,28 @@ def head_parts(char):
     if c['hat']:
         sc = c['hat'][1]
         cx, cy, cz = head_center(c)
-        v, f = uv_sphere((0, cy + 0.012, cz + H * 0.1), 1.0, seg=16, rings=10, top_only=True)
-        v = [[x * W / 2 * sc, cy + 0.012 + (y - cy - 0.012) * D / 2 * sc * 1.08, cz + H * 0.1 + (z - cz - H * 0.1) * H / 2 * sc * 0.95] for x, y, z in v]
-        # slouch: the back of the hat hangs down
-        v = [[x, y + max(0, y - cy) * 0.35, z - max(0, y - cy) * 0.55] for x, y, z in v]
-        P.append(Part('hat', v, f, 'head', bh.R['HEAD']))
-        v, f = cylinder((0, cy + 0.01, cz + H * 0.05), (0, cy + 0.012, cz + H * 0.18), W / 2 * sc * 1.03, W / 2 * sc * 1.0, sides=16, caps=False)
+        brim0, brim1 = base + H * 0.72, base + H * 0.86          # folded brim, just above the brows
+        dome_c = brim1 - 0.005
+        v, f = uv_sphere((0, 0, 0), 1.0, seg=16, rings=10, top_only=True)
+        dv = []
+        for x, y, z in v:
+            X, Y, Z = x * W / 2 * sc * 1.02, y * D / 2 * sc * 1.06 + 0.01, z * H * 0.46 * sc
+            Y += max(0.0, y) * Z * 0.25              # slouch: the top leans back a little
+            dv.append([X, cy + Y, dome_c + Z])
+        P.append(Part('hat', dv, f, 'head', bh.R['HEAD']))
+        v, f = cylinder((0, cy + 0.01, brim0), (0, cy + 0.01, brim1), W / 2 * sc * 1.06, W / 2 * sc * 1.04, sides=16, caps=False)
         P.append(Part('hat_brim', v, f, 'head', bh.R['HEAD']))
     # nose ring (septum)
     if c['ring']:
-        import charlib
-        v, f = charlib.cylinder((-0.007, -D / 2 - 0.018, base + H * 0.37), (0.007, -D / 2 - 0.018, base + H * 0.37), 0.008, 0.008, sides=6)
-        P.append(Part('ring', v, f, 'head', bh.R['HEAD']))
+        rv, rf = [], []
+        rc = (0, -D / 2 - 0.016, base + H * 0.385)
+        for i in range(6):
+            a0, a1 = 2 * math.pi * i / 6, 2 * math.pi * (i + 1) / 6
+            p0 = (rc[0] + math.cos(a0) * 0.007, rc[1], rc[2] + math.sin(a0) * 0.007 - 0.004)
+            p1 = (rc[0] + math.cos(a1) * 0.007, rc[1], rc[2] + math.sin(a1) * 0.007 - 0.004)
+            v, f = cylinder(p0, p1, 0.0018, 0.0018, sides=4)
+            rf += [[i_ + len(rv) for i_ in q] for q in f]; rv += v
+        P.append(Part('ring', rv, rf, 'head', bh.R['HEAD']))
     return P
 
 
@@ -233,7 +243,11 @@ class HeadPainter:
     def __init__(self, char, face_img):
         self.c = CHARS[char]
         f = face_img.convert('RGBA')
-        self.hair = self._tile(f.crop(self.c['hair_box']))
+        hb = f.crop(self.c['hair_box'])
+        g = self.c.get('hair_gain', 1.0)
+        if g != 1.0:
+            hb = hb.point(lambda v: min(255, int(v * g)))
+        self.hair = self._tile(hb)
         if self.c['beard']:
             self.beard = self._tile(f.crop(fe.map_box((24, 104, 104, 120), max(8, round(128 * fe.SCALE['hero'] / fe.GRID) * fe.GRID) / 128)))
         if self.c['hat']:
@@ -253,12 +267,12 @@ class HeadPainter:
 
     @staticmethod
     def _knit(col):
-        img = Image.new('RGBA', (8, 8))
+        img = Image.new('RGBA', (16, 16))          # chunky knit: big V stitches like the sheet
         p = img.load()
-        for y in range(8):
-            for x in range(8):
-                v = 1.1 if ((x % 4 < 2) != (y % 2 == 0)) else 0.78
-                if y % 4 == 3:
+        for y in range(16):
+            for x in range(16):
+                v = 1.12 if ((x % 8 < 4) != (y % 4 < 2)) else 0.8
+                if y % 8 >= 6:
                     v *= 0.85
                 p[x, y] = tuple(min(255, int(c * v)) for c in col) + (255,)
         return HeadPainter._tile(img)
@@ -291,7 +305,7 @@ class HeadPainter:
                 return self.hair[px, py]
             if c['beard'] and z < c['base'] + c['H'] * 0.38:
                 return self.beard[px, py]
-            return self.k(self.skin, (0.82 if abs(x) > c['W'] * 0.4 else 0.92) * jitter)
+            return self.k(self.skin, (0.9 if abs(x) > c['W'] * 0.42 else 0.97) * jitter)
         return (255, 0, 255, 255)
 
 

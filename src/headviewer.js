@@ -81,9 +81,20 @@ function load(c) {
       }
     });
     scene.add(current);
-    const bb = new THREE.Box3().setFromObject(current);
-    focus = bb.getCenter(new THREE.Vector3()); focus.y += (bb.max.y - focus.y) * 0.35;
-    viewDist = Math.max(0.55, (bb.max.y - bb.min.y) * 2.2);
+    // frame on the head mesh itself (long hair / collars would skew the box)
+    let headMesh = null;
+    current.traverse((o) => { if (o.isMesh && !/hat/.test(o.name) && (!headMesh || o.geometry.attributes.position.count > headMesh.geometry.attributes.position.count)) headMesh = o; });
+    const bb = new THREE.Box3();
+    headMesh.geometry.computeBoundingBox();
+    const hb = headMesh.geometry.boundingBox;
+    bb.copy(hb);
+    const skinned = headMesh.isSkinnedMesh;
+    focus = bb.getCenter(new THREE.Vector3());
+    // the skeleton keeps the head at its real height: use the head bone if there is one
+    let headBone = null; current.traverse((o) => { if (o.isBone && o.name === 'head') headBone = o; });
+    if (headBone) { const wp = new THREE.Vector3(); headBone.getWorldPosition(wp); focus.set(0, wp.y + 0.11 * (bb.max.x - bb.min.x) / 0.26, 0); }
+    viewDist = 0.95 * Math.max(0.6, (bb.max.x - bb.min.x) / 0.3);
+    void skinned;
     setView(lastView);
     let bones = 0; current.traverse((o) => { if (o.isBone) bones++; });
     $('#stats').innerHTML = `${c.name}<br>треугольников: ${Math.round(tris)}<br>костей: ${bones}<br>анимаций: ${gltf.animations.length}`;

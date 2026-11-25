@@ -20,7 +20,7 @@ const EXPR = ['neutral', 'surprise', 'anxiety', 'tired', 'sad', 'joy'];
     await p.waitForTimeout(400);
     await shot(`${v}.png`);
   }
-  await p.evaluate(() => window.__viewer.setView('three_quarter'));
+  await p.evaluate(() => window.__viewer.setView('front'));
   for (const e of EXPR) {
     await p.evaluate((e) => window.__setFace(e), e);
     await p.waitForTimeout(700);
