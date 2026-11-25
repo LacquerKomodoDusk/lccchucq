@@ -7,9 +7,9 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 const EXPR = [['neutral', 'Нейтр.'], ['surprise', 'Удивление'], ['anxiety', 'Тревога'], ['tired', 'Усталость'], ['sad', 'Грусть'], ['joy', 'Радость']];
 const CHARS = [
   { id: 'hero', name: 'Герой', ready: true, faces: EXPR },
-  { id: 'wife', name: 'Жена', ready: false },
-  { id: 'son_older', name: 'Старший сын', ready: false },
-  { id: 'son_younger', name: 'Младший сын', ready: false },
+  { id: 'wife', name: 'Жена', ready: true, faces: [...EXPR, ['look_left', 'Взгляд влево'], ['look_right', 'Взгляд вправо']] },
+  { id: 'son_older', name: 'Старший сын', ready: true, faces: EXPR },
+  { id: 'son_younger', name: 'Младший сын', ready: true, faces: EXPR },
 ];
 
 const $ = (s) => document.querySelector(s);
@@ -25,8 +25,8 @@ camera.position.set(0, 1.68, 1.1);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 1.68, 0);
 controls.enableDamping = true;
-scene.add(new THREE.HemisphereLight(0xd8d0e0, 0x2a2420, 1.1));
-const key = new THREE.DirectionalLight(0xfff0dc, 1.6); key.position.set(1.5, 3, 2.5); scene.add(key);
+scene.add(new THREE.HemisphereLight(0xb8b0c8, 0x201a18, 0.75));
+const key = new THREE.DirectionalLight(0xffe0c0, 2.4); key.position.set(-1.6, 2.2, 2.6); scene.add(key);
 const rim = new THREE.DirectionalLight(0x8090c0, 0.6); rim.position.set(-2, 2, -2); scene.add(rim);
 const floor = null && new THREE.Mesh(new THREE.CircleGeometry(1.2, 24), new THREE.MeshLambertMaterial({ color: 0x2c2632 }));
 
@@ -35,6 +35,7 @@ const floor = null && new THREE.Mesh(new THREE.CircleGeometry(1.2, 24), new THRE
 const loader = new GLTFLoader();
 const texLoader = new THREE.TextureLoader();
 let texWait = null;
+let focus = new THREE.Vector3(0, 1.66, 0), viewDist = 1.05, lastView = 'front', hatOn = true;
 let current = null, mixer = null, actions = {}, active = null, playing = true, wire = false, helper = null, spin = false;
 const clock = new THREE.Clock();
 
@@ -80,6 +81,10 @@ function load(c) {
       }
     });
     scene.add(current);
+    const bb = new THREE.Box3().setFromObject(current);
+    focus = bb.getCenter(new THREE.Vector3()); focus.y += (bb.max.y - focus.y) * 0.35;
+    viewDist = Math.max(0.55, (bb.max.y - bb.min.y) * 2.2);
+    setView(lastView);
     let bones = 0; current.traverse((o) => { if (o.isBone) bones++; });
     $('#stats').innerHTML = `${c.name}<br>треугольников: ${Math.round(tris)}<br>костей: ${bones}<br>анимаций: ${gltf.animations.length}`;
     mixer = new THREE.AnimationMixer(current);
@@ -126,13 +131,16 @@ $('#bones').addEventListener('click', (e) => {
   if (helper) { scene.remove(helper); helper = null; e.target.classList.remove('on'); return; }
   helper = new THREE.SkeletonHelper(current); scene.add(helper); e.target.classList.add('on');
 });
+window.__toggleHat = (on) => { hatOn = on ?? !hatOn; current?.traverse((o) => { if (o.isMesh && /hat/.test(o.name)) o.visible = hatOn; }); const b = document.querySelector('#hat'); if (b) b.classList.toggle('on', hatOn); };
+document.querySelector('#hat')?.addEventListener('click', () => window.__toggleHat());
 $('#spin').addEventListener('click', (e) => { spin = !spin; e.target.classList.toggle('on', spin); });
 $('#showuv').addEventListener('change', (e) => { $('#uv').style.display = e.target.checked ? '' : 'none'; });
 document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
 function setView(v) {
-  const d = 1.05;
-  const pos = { front: [0, 1.7, d], side: [d, 1.7, 0], back: [0, 1.7, -d], three_quarter: [d * 0.72, 1.72, d * 0.72] }[v];
-  camera.position.set(...pos); controls.target.set(0, 1.66, 0); controls.update();
+  lastView = v;
+  const d = viewDist, y = focus.y + 0.03;
+  const pos = { front: [0, y, d], side: [d, y, 0], back: [0, y, -d], three_quarter: [d * 0.72, y + 0.02, d * 0.72] }[v];
+  camera.position.set(pos[0] + focus.x, pos[1], pos[2] + focus.z); controls.target.copy(focus); controls.update();
 }
 
 function frame() {

@@ -31,10 +31,12 @@ const EXPR = ['neutral', 'surprise', 'anxiety', 'tired', 'sad', 'joy'];
   await p.evaluate(() => window.__viewer.setView('front'));
   for (let i = 0; i < 6; i++) {
     await p.evaluate((i) => {
-      const a = window.__viewer.actions.head_turn_bus;
-      Object.values(window.__viewer.actions).forEach((x) => x.stop());
+      const acts = window.__viewer.actions;
+      const a = acts.head_turn_bus || acts.glance_away || acts.look_around;
+      Object.values(acts).forEach((x) => x.stop());
       a.reset().play();
-      window.__viewer.mixer.setTime([0, 0.05, 0.12, 0.8, 1.9, 2.4][i]);
+      const dur = a.getClip().duration;
+      window.__viewer.mixer.setTime(acts.head_turn_bus ? [0, 0.05, 0.12, 0.8, 1.9, 2.4][i] : (dur * i) / 6);
     }, i);
     await p.waitForTimeout(150);
     await shot(`turn_${i}.png`);

@@ -143,7 +143,7 @@ def uv_sphere(center, radius, scale=(1, 1, 1), seg=10, rings=8, top_only=False):
     return verts, faces
 
 
-def sculpted_head(base, w, h, d, female=False, kid=False, seg=12, rings=10):
+def sculpted_head(base, w, h, d, female=False, kid=False, seg=12, rings=10, jaw=None):
     """Faceted skull: sphere pushed into brow ridge, sockets, cheekbones, jaw and chin.
     `base` is the bottom-centre (chin level) point. Faces -Y."""
     verts, faces = uv_sphere((0, 0, 0), 1.0, seg=seg, rings=rings)
@@ -158,7 +158,7 @@ def sculpted_head(base, w, h, d, female=False, kid=False, seg=12, rings=10):
         x *= 0.96
         if nz < -0.15:
             t = (-nz - 0.15) / 0.85
-            taper = 0.25 if kid else 0.48 if female else 0.40
+            taper = jaw if jaw is not None else 0.25 if kid else 0.48 if female else 0.40
             x *= 1 - t * taper
             if ny > 0:
                 y *= 1 - t * 0.45
@@ -228,11 +228,21 @@ def compute_uvs(part):
             if fc[1] < ctr[1] - ext[1] * getattr(part, 'face_depth', 0.18) and abs(fc[0] - ctr[0]) < ext[0] * getattr(part, 'face_width', 0.42):
                 rx, ry, rw, rh = part.rect
                 uvs = []
+                fm = getattr(part, 'face_map', None)
                 for p in pts:
-                    u = (p[0] - mn[0]) / ext[0]
-                    v = (p[2] - mn[2]) / ext[2]
-                    px = rx + 1 + u * (rw - 2)
-                    py = ry + 1 + (1 - v) * (rh - 2)
+                    if fm:
+                        # landmarks: texture eye row / chin row (fractions from the top) are
+                        # pinned to the geometry's eye height / chin; width by cheek span
+                        ty = fm['chin_y'] + (fm['eye_y'] - fm['chin_y']) * (p[2] - fm['z_chin']) / (fm['z_eye'] - fm['z_chin'])
+                        tx = 0.5 + p[0] / fm['half_w'] * fm['face_w'] / 2
+                        tx = min(1.0, max(0.0, tx)); ty = min(1.0, max(0.0, ty))
+                        px = rx + 1 + tx * (rw - 2)
+                        py = ry + 1 + ty * (rh - 2)
+                    else:
+                        u = (p[0] - mn[0]) / ext[0]
+                        v = (p[2] - mn[2]) / ext[2]
+                        px = rx + 1 + u * (rw - 2)
+                        py = ry + 1 + (1 - v) * (rh - 2)
                     uvs.append((px / ATLAS, 1 - py / ATLAS))
                 out.append(uvs)
                 continue
